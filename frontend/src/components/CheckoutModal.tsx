@@ -5,7 +5,7 @@ import {
   CreditCard, Wallet, QrCode, Timer, Clock, ArrowRight, Sparkles,
   AlertCircle, Check
 } from 'lucide-react';
-import SwiggyVegBadge from './SwiggyVegBadge';
+import VegBadge from './VegBadge';
 
 interface Address {
   id: number;
@@ -28,7 +28,7 @@ interface CartItem {
   category?: string;
 }
 
-interface SwiggyCheckoutModalProps {
+interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   cartData: CartItem[];
@@ -45,7 +45,7 @@ interface SwiggyCheckoutModalProps {
   onEarnRewardPoints?: (pts: number) => void;
 }
 
-export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
+export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   isOpen,
   onClose,
   cartData,
@@ -169,13 +169,13 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
     setCouponError('');
     setCouponSuccessMsg('');
 
-    if (cleanCode === 'SWIGGY50' || cleanCode === 'SWIGGY') {
+    if (cleanCode === 'SAHOO50' || cleanCode === 'SAHOO') {
       if (itemTotal < 250) {
-        setCouponError('Minimum order amount for SWIGGY50 is ₹250');
+        setCouponError('Minimum order amount for SAHOO50 is ₹250');
         return;
       }
-      setAppliedCoupon({ code: 'SWIGGY50', discount: 50, label: 'Flat ₹50 OFF with Swiggy Welcome' });
-      setCouponSuccessMsg('🎉 "SWIGGY50" applied! You saved ₹50');
+      setAppliedCoupon({ code: 'SAHOO50', discount: 50, label: 'Flat ₹50 OFF with Sahoo Welcome' });
+      setCouponSuccessMsg('🎉 "SAHOO50" applied! You saved ₹50');
     } else if (cleanCode === 'SWEET100' || cleanCode === 'FESTIVE100') {
       if (itemTotal < 599) {
         setCouponError('Minimum order amount for SWEET100 is ₹599');
@@ -187,7 +187,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
       setAppliedCoupon({ code: 'FREEDEL', discount: 35, label: 'Free Delivery on your order' });
       setCouponSuccessMsg('🎉 "FREEDEL" applied! ₹35 delivery fee waived');
     } else {
-      setCouponError('Invalid coupon code. Try SWIGGY50 or FREEDEL');
+      setCouponError('Invalid coupon code. Try SAHOO50 or FREEDEL');
     }
   };
 
@@ -316,7 +316,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
             </div>
             <div className="space-y-1">
               <span className="text-[11px] font-black uppercase tracking-widest text-orange-600 bg-orange-50 px-3 py-1 rounded-full border border-orange-200">
-                SWIGGY ORDER CONFIRMED
+                SAHOO SWEETS ORDER CONFIRMED
               </span>
               <h3 className="text-2xl font-black text-gray-900 pt-2">Order Placed Successfully!</h3>
               <p className="text-xs text-gray-500 max-w-xs mx-auto">
@@ -329,7 +329,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
           </div>
         )}
 
-        {/* SWIGGY TOP HEADER */}
+        {/* TOP HEADER */}
         <div className="bg-white border-b px-5 py-4 flex items-center justify-between shrink-0 shadow-xs">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-2xl bg-orange-500 text-white flex items-center justify-center font-black shadow-md shadow-orange-500/30">
@@ -394,7 +394,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
           {/* STEP 1: CART & DELIVERY DETAILS */}
           {checkoutStep === 'cart' && (
             <>
-              {/* DELIVERY ADDRESS SWIGGY CARD */}
+              {/* DELIVERY ADDRESS CARD */}
               <div className="bg-white rounded-2xl p-4 shadow-xs border border-gray-100 space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-3">
@@ -467,7 +467,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                   </div>
                 )}
 
-                {/* SWIGGY DELIVERY INSTRUCTIONS TILES */}
+                {/* DELIVERY INSTRUCTIONS TILES */}
                 <div className="border-t pt-3 space-y-2">
                   <p className="text-[11px] font-extrabold text-gray-700 flex items-center">
                     <span>Delivery Instructions for Valet</span>
@@ -512,7 +512,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                     Order Items ({totalCount})
                   </h4>
                   <span className="text-[11px] text-emerald-700 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-md flex items-center space-x-1">
-                    <SwiggyVegBadge size="sm" />
+                    <VegBadge size="sm" />
                     <span>100% Pure Desi Ghee & Fresh</span>
                   </span>
                 </div>
@@ -527,7 +527,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                     {cartData.map((item, idx) => (
                       <div key={idx} className="pt-2.5 first:pt-0 flex items-center justify-between gap-3">
                         <div className="flex items-center space-x-2.5 overflow-hidden">
-                          <SwiggyVegBadge size="md" />
+                          <VegBadge size="md" />
                           <div className="overflow-hidden">
                             <h5 className="text-xs font-black text-gray-900 truncate">
                               {item.name}
@@ -541,7 +541,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                           </div>
                         </div>
 
-                        {/* Swiggy Style Quantity Box */}
+                        {/* Quantity Selector Box */}
                         <div className="flex items-center space-x-2 bg-white px-2.5 py-1 rounded-xl border border-gray-200 shadow-xs shrink-0">
                           <button
                             onClick={() => onUpdateQty(item.name, -1)}
@@ -615,7 +615,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                         type="text"
                         value={couponCode}
                         onChange={e => setCouponCode(e.target.value)}
-                        placeholder="Enter coupon code (e.g. SWIGGY50)"
+                        placeholder="Enter coupon code (e.g. SAHOO50)"
                         className="flex-1 text-xs px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-orange-500 uppercase font-bold"
                       />
                       <button
@@ -635,10 +635,10 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                     {/* Popular Coupon Chips */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       <button
-                        onClick={() => applyCoupon('SWIGGY50')}
+                        onClick={() => applyCoupon('SAHOO50')}
                         className="text-[10px] font-bold px-2 py-1 bg-amber-50 text-amber-900 border border-amber-200 rounded-lg hover:bg-amber-100 transition cursor-pointer"
                       >
-                        🏷️ SWIGGY50 (₹50 OFF on ₹250+)
+                        🏷️ SAHOO50 (₹50 OFF on ₹250+)
                       </button>
                       <button
                         onClick={() => applyCoupon('FREEDEL')}
@@ -657,7 +657,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                 )}
               </div>
 
-              {/* TIP DELIVERY PARTNER (SWIGGY ICONIC) */}
+              {/* TIP DELIVERY PARTNER */}
               <div className="bg-white rounded-2xl p-4 shadow-xs border border-gray-100 space-y-2.5">
                 <div className="flex items-center space-x-2">
                   <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
@@ -848,7 +848,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
             </>
           )}
 
-          {/* STEP 2: SWIGGY PAYMENT OPTIONS */}
+          {/* STEP 2: PAYMENT OPTIONS */}
           {checkoutStep === 'payment' && (
             <div className="space-y-4">
               <div className="bg-white rounded-2xl p-4 shadow-xs border border-gray-100 flex items-center justify-between">
@@ -1185,7 +1185,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
           )}
         </div>
 
-        {/* SWIGGY STICKY BOTTOM CHECKOUT ACTION BAR */}
+        {/* STICKY BOTTOM CHECKOUT ACTION BAR */}
         <div className="bg-white border-t px-5 py-3.5 shrink-0 shadow-lg flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">
@@ -1238,4 +1238,4 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
   );
 };
 
-export default SwiggyCheckoutModal;
+export default CheckoutModal;

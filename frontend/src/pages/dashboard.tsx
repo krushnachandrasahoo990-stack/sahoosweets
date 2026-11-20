@@ -7,10 +7,10 @@ import {
   CreditCard, ShieldCheck, Download, QrCode, Timer, RefreshCw, Send, Sparkles, Navigation,
   Package, Check, AlertCircle, ToggleLeft, ToggleRight, Coffee, ChefHat
 } from 'lucide-react';
-import SwiggyVegBadge from '../components/SwiggyVegBadge';
-import SwiggyCheckoutModal from '../components/SwiggyCheckoutModal';
-import SwiggyLiveTracking from '../components/SwiggyLiveTracking';
-import SwiggyRatingModal from '../components/SwiggyRatingModal';
+import VegBadge from '../components/VegBadge';
+import CheckoutModal from '../components/CheckoutModal';
+import LiveTrackingModal from '../components/LiveTrackingModal';
+import RatingModal from '../components/RatingModal';
 
 interface DashboardProps {
   userRole?: 'customer' | 'admin';
@@ -1042,7 +1042,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
                             
                             {/* Badges */}
                             <div className="absolute top-3 left-3 z-10 flex items-center space-x-1.5">
-                              <SwiggyVegBadge size="sm" />
+                              <VegBadge size="sm" />
                               <span className="text-white font-black text-[9px] px-2 py-0.5 rounded-full shadow" style={{ backgroundColor: '#c2b767' }}>{item.badge}</span>
                               {isOut && (
                                 <span className="bg-rose-600 text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase shadow">
@@ -1123,7 +1123,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
                   <div>
                     <div className="flex items-center space-x-2">
                       <span className="text-[10px] font-black uppercase text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                        Swiggy Live Delivery
+                        Sahoo Live Delivery
                       </span>
                     </div>
                     <h2 className="text-xl sm:text-2xl font-black text-gray-900 mt-1">Live Order Tracking & History</h2>
@@ -1238,7 +1238,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
                           </div>
 
                           <div className="flex items-start space-x-2.5">
-                            <SwiggyVegBadge size="md" />
+                            <VegBadge size="md" />
                             <div className="flex-1">
                               <p className="text-xs font-extrabold text-gray-900 leading-snug">{order.items || "Sahoo Sweets Items"}</p>
                               <p className="text-[11px] text-gray-500 mt-0.5">📍 {order.address || currentHeaderAddressString}</p>
@@ -1834,8 +1834,8 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
         </div>
       )}
 
-      {/* 2. SWIGGY 2-STEP RICH CHECKOUT MODAL */}
-      <SwiggyCheckoutModal
+      {/* 2. RICH CHECKOUT MODAL */}
+      <CheckoutModal
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         cartData={cartData || []}
@@ -1852,9 +1852,9 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
         onEarnRewardPoints={handleEarnRewardPoints}
       />
 
-      {/* 3. SWIGGY LIVE GPS DELIVERY TRACKING MODAL */}
+      {/* 3. LIVE GPS DELIVERY TRACKING MODAL */}
       {activeTrackingOrder && (
-        <SwiggyLiveTracking
+        <LiveTrackingModal
           order={activeTrackingOrder}
           onClose={() => setActiveTrackingOrder(null)}
           onUpdateOrderStatus={handleUpdateOrderStatus}
@@ -1865,9 +1865,9 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
         />
       )}
 
-      {/* 4. SWIGGY 5-STAR RATING & FEEDBACK MODAL */}
+      {/* 4. 5-STAR RATING & FEEDBACK MODAL */}
       {ratingOrder && (
-        <SwiggyRatingModal
+        <RatingModal
           order={ratingOrder}
           onClose={() => setRatingOrder(null)}
           onSubmit={handleRateOrderSubmit}
@@ -1888,7 +1888,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
           </div>
           <div className="text-left">
             <div className="flex items-center space-x-1.5">
-              <span className="text-[10px] font-black uppercase text-orange-400">Swiggy Live Delivery</span>
+              <span className="text-[10px] font-black uppercase text-orange-400">Sahoo Live Delivery</span>
               <span className="text-[9px] text-gray-400">#{activeOrder.id}</span>
             </div>
             <p className="text-xs font-black text-white">

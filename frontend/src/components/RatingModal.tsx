@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { X, Star, ThumbsUp, CheckCircle2 } from 'lucide-react';
 
-interface SwiggyRatingModalProps {
+interface RatingModalProps {
   order: any;
   onClose: () => void;
   onSubmit: (orderId: string, rating: number, feedback: string) => void;
 }
 
-export const SwiggyRatingModal: React.FC<SwiggyRatingModalProps> = ({ order, onClose, onSubmit }) => {
+export const RatingModal: React.FC<RatingModalProps> = ({ order, onClose, onSubmit }) => {
   const [foodRating, setFoodRating] = useState<number>(5);
   const [deliveryRating, setDeliveryRating] = useState<number>(5);
   const [selectedTags, setSelectedTags] = useState<string[]>(['Fresh & Authentic', 'Quick Delivery']);
@@ -58,7 +58,7 @@ export const SwiggyRatingModal: React.FC<SwiggyRatingModalProps> = ({ order, onC
         ) : (
           <>
             <div className="border-b pb-3">
-              <span className="text-[10px] font-black uppercase tracking-wider text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md">Swiggy Order Experience</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md">Order Experience</span>
               <h3 className="text-lg font-black text-gray-900 mt-1">Rate Your Order • {order.id}</h3>
               <p className="text-xs text-gray-500">{order.items}</p>
             </div>
@@ -154,4 +154,4 @@ export const SwiggyRatingModal: React.FC<SwiggyRatingModalProps> = ({ order, onC
   );
 };
 
-export default SwiggyRatingModal;
+export default RatingModal;

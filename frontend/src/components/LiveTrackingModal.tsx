@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronDown, CheckCircle2, AlertCircle, 
   Share2, ArrowLeft, Download, RotateCcw, Heart, Send, Check
 } from 'lucide-react';
-import SwiggyVegBadge from './SwiggyVegBadge';
+import VegBadge from './VegBadge';
 
 interface OrderItem {
   name: string;
@@ -13,7 +13,7 @@ interface OrderItem {
   img?: string;
 }
 
-interface SwiggyOrder {
+interface LiveOrder {
   id: string;
   date: string;
   items: string;
@@ -41,14 +41,14 @@ interface SwiggyOrder {
   estimatedMinutes?: number;
 }
 
-interface SwiggyLiveTrackingProps {
-  order: SwiggyOrder;
+interface LiveTrackingProps {
+  order: LiveOrder;
   onClose: () => void;
   onUpdateOrderStatus?: (orderId: string, newStatusIndex: number) => void;
-  onOpenRatingModal?: (order: SwiggyOrder) => void;
+  onOpenRatingModal?: (order: LiveOrder) => void;
 }
 
-export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
+export const LiveTrackingModal: React.FC<LiveTrackingProps> = ({
   order,
   onClose,
   onUpdateOrderStatus,
@@ -203,7 +203,7 @@ export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <span className="text-[10px] font-black uppercase tracking-wider text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                  LIVE SWIGGY TRACKING
+                  LIVE ORDER TRACKING
                 </span>
                 <span className="text-xs font-black text-gray-900">Order #{order.id}</span>
               </div>
@@ -237,7 +237,7 @@ export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
                 Demo Simulator
               </span>
               <span className="text-xs font-extrabold text-orange-950">
-                Test Real-Time Swiggy Stages:
+                Test Real-Time Delivery Stages:
               </span>
             </div>
 
@@ -394,7 +394,7 @@ export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
               </div>
             </div>
 
-            {/* 5-STEP SWIGGY PROGRESS BAR */}
+            {/* 5-STEP DELIVERY PROGRESS BAR */}
             <div className="pt-2">
               <div className="flex items-center justify-between relative px-2">
                 {/* Background line */}
@@ -431,7 +431,7 @@ export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
             </div>
           </div>
 
-          {/* SWIGGY DELIVERY VALET PROFILE CARD */}
+          {/* DELIVERY VALET PROFILE CARD */}
           <div className="bg-white rounded-3xl p-4 shadow-xs border border-gray-100 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -454,7 +454,7 @@ export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
                     </span>
                   </div>
                   <p className="text-[11px] text-gray-500 font-medium">
-                    Swiggy Valet • Verified Pure Desi Ghee Sweets Courier
+                    Delivery Partner • Verified Pure Desi Ghee Sweets Courier
                   </p>
                   <p className="text-[10px] font-extrabold text-emerald-700 flex items-center mt-0.5">
                     <ShieldCheck className="w-3 h-3 mr-1 text-emerald-600" />
@@ -544,7 +544,7 @@ export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
 
             <div className="space-y-2">
               <div className="flex items-center space-x-2">
-                <SwiggyVegBadge size="md" />
+                <VegBadge size="md" />
                 <span className="text-xs font-extrabold text-gray-900">{order.items}</span>
               </div>
               {order.cookingInstruction && (
@@ -578,7 +578,7 @@ export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
                 </div>
                 <div>
                   <h4 className="text-xs font-black">Chat with Ramesh Kumar</h4>
-                  <p className="text-[10px] text-orange-100">Swiggy Valet • Online</p>
+                  <p className="text-[10px] text-orange-100">Delivery Partner • Online</p>
                 </div>
               </div>
               <button 
@@ -648,7 +648,7 @@ export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
         {showCallModal && (
           <div className="absolute inset-0 z-50 bg-slate-900 text-white flex flex-col items-center justify-between p-8 text-center animate-in fade-in">
             <div className="space-y-2 pt-6">
-              <p className="text-xs font-black uppercase tracking-widest text-orange-400">Swiggy Valet Direct Line</p>
+              <p className="text-xs font-black uppercase tracking-widest text-orange-400">Delivery Partner Direct Line</p>
               <h3 className="text-2xl font-black">Ramesh Kumar</h3>
               <p className="text-xs text-slate-400">+91 98612 34567 • Delivery Executive</p>
             </div>
@@ -724,12 +724,12 @@ export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
           </div>
         )}
 
-        {/* --- 24x7 SWIGGY SWEET CARE HELP MODAL --- */}
+        {/* --- 24x7 SAHOO SWEET CARE HELP MODAL --- */}
         {showHelpModal && (
           <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 border border-gray-100 shadow-2xl">
               <div className="flex justify-between items-center border-b pb-2">
-                <h4 className="text-sm font-black text-gray-900">Swiggy Sweet Care (24x7 Support)</h4>
+                <h4 className="text-sm font-black text-gray-900">Sahoo Sweet Care (24x7 Support)</h4>
                 <button onClick={() => setShowHelpModal(false)} className="cursor-pointer text-gray-400 hover:text-gray-600">
                   <X className="w-4 h-4" />
                 </button>
@@ -765,4 +765,4 @@ export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
   );
 };
 
-export default SwiggyLiveTracking;
+export default LiveTrackingModal;
