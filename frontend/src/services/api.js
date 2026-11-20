@@ -26,3 +26,33 @@ export const getSweetsMenu = async () => {
     return [];
   }
 };
+
+// Send OTP API Call
+export const sendOtpApi = async (identifier, type = 'Login') => {
+  try {
+    const response = await fetch(`${API_URL}/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, type }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Send OTP Error:", error);
+    return { success: false, message: "Network error connecting to OTP gateway." };
+  }
+};
+
+// Verify OTP API Call
+export const verifyOtpApi = async (identifier, otp) => {
+  try {
+    const response = await fetch(`${API_URL}/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, otp }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Verify OTP Error:", error);
+    return { success: false, message: "Network error connecting to OTP gateway." };
+  }
+};

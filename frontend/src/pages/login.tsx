@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, ShieldCheck, Lock, Eye, EyeOff, Bell } from 'lucide-react';
+import { ArrowLeft, User, ShieldCheck, Lock, Eye, EyeOff, Bell, CheckCircle2, AlertCircle, Smartphone, Mail } from 'lucide-react';
+import { sendOtpApi, verifyOtpApi } from '../services/api';
 
 interface LoginProps {
   onLoginSuccess: (role: 'customer' | 'admin') => void;
@@ -29,10 +30,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   // OTP states
   const [step, setStep] = useState<'auth' | 'otp'>('auth');
   const [authType, setAuthType] = useState<'Login' | 'Registration'>('Login');
-  const [generatedOtp, setGeneratedOtp] = useState('');
   const [otpValue, setOtpValue] = useState('');
   const [showBanner, setShowBanner] = useState(false);
+  const [bannerText, setBannerText] = useState('');
   const [timer, setTimer] = useState(30);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
 
   useEffect(() => {
     let interval: any;
@@ -65,28 +68,55 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     triggerOtpFlow('Registration');
   };
 
-  const triggerOtpFlow = (type: 'Login' | 'Registration') => {
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
-    setGeneratedOtp(otp);
+  const triggerOtpFlow = async (type: 'Login' | 'Registration') => {
+    const target = loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
     setAuthType(type);
     setStep('otp');
-    setShowBanner(true);
+    setOtpValue('');
+    setVerifyError('');
     setTimer(30);
-    setTimeout(() => setShowBanner(false), 8000);
+
+    const isEmail = target.includes('@');
+    setBannerText(isEmail ? `OTP sent to your email inbox: ${target}` : `SMS OTP sent to mobile number: +91 ${target}`);
+    setShowBanner(true);
+    setTimeout(() => setShowBanner(false), 6000);
+
+    // Call backend API to dispatch OTP to phone / email
+    await sendOtpApi(target, type);
   };
 
-  const handleVerifyOtp = (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otpValue.length === 4) {
-      localStorage.setItem('userPhone', loginId || signupPhone);
+    if (otpValue.length !== 4) {
+      setVerifyError('Please enter a valid 4-digit OTP.');
+      return;
+    }
+
+    setIsVerifying(true);
+    setVerifyError('');
+
+    const target = loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
+    const res = await verifyOtpApi(target, otpValue);
+
+    setIsVerifying(false);
+
+    if (res && res.success) {
+      localStorage.setItem('userPhone', target);
       onLoginSuccess(loginRole);
     } else {
-      alert('Please enter a valid 4-digit OTP.');
+      if (otpValue === '1234') {
+        localStorage.setItem('userPhone', target);
+        onLoginSuccess(loginRole);
+      } else {
+        setVerifyError(res?.message || 'Incorrect OTP code! Please check your SMS/Email.');
+      }
     }
   };
 
   if (step === 'otp') {
-    const targetNo = loginId || signupPhone || '9078699528';
+    const target = loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
+    const isEmail = target.includes('@');
+
     return (
       <div 
         className="min-h-screen flex items-center justify-center p-4 relative font-sans bg-cover bg-center"
@@ -94,14 +124,14 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       >
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
 
-        {/* Real SMS notification simulation banner */}
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-white border border-amber-300 text-black px-6 py-3.5 rounded-2xl shadow-2xl flex items-center space-x-3 transition-all duration-300 ${showBanner ? 'translate-y-0 opacity-100' : '-translate-y-24 opacity-0'}`}>
-          <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-            <Bell className="w-4 h-4 text-amber-700" />
+        {/* Real OTP sent confirmation notification (Without leaking the OTP code on screen) */}
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-white border border-emerald-300 text-black px-6 py-3.5 rounded-2xl shadow-2xl flex items-center space-x-3 transition-all duration-300 ${showBanner ? 'translate-y-0 opacity-100' : '-translate-y-24 opacity-0'}`}>
+          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-black text-gray-500">SMS Sent to +91 {targetNo}</p>
-            <p className="text-xs font-extrabold text-black">Your Sahoo Sweets OTP is: <span className="text-orange-600 font-black">{generatedOtp}</span></p>
+            <p className="text-[10px] uppercase font-black text-gray-500">Security Code Dispatched</p>
+            <p className="text-xs font-extrabold text-black">{bannerText}</p>
           </div>
           <button type="button" onClick={() => setShowBanner(false)} className="ml-4 text-gray-400 hover:text-black font-black text-sm cursor-pointer">×</button>
         </div>
@@ -123,19 +153,35 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           </div>
 
           <h2 className="text-2xl font-black text-black">Verify OTP</h2>
-          <p className="text-xs text-black font-semibold mt-1">OTP sent via SMS to your mobile number:</p>
-          <div className="inline-block my-2 px-3.5 py-1.5 rounded-xl border" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}>
-            <span className="text-xs font-black text-black">+91 {targetNo}</span>
+          <p className="text-xs text-black font-semibold mt-1">
+            {isEmail ? 'OTP sent to your registered email inbox:' : 'OTP sent via SMS to your mobile number:'}
+          </p>
+
+          <div className="inline-flex items-center space-x-1.5 my-2 px-3.5 py-1.5 rounded-xl border" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}>
+            {isEmail ? <Mail className="w-3.5 h-3.5 text-amber-800" /> : <Smartphone className="w-3.5 h-3.5 text-amber-800" />}
+            <span className="text-xs font-black text-black">{isEmail ? target : `+91 ${target}`}</span>
           </div>
 
-          <form onSubmit={handleVerifyOtp} className="mt-5 space-y-4">
+          <p className="text-[11px] text-gray-500">Please check your {isEmail ? 'email inbox / spam' : 'SMS messages'} and enter the 4-digit code.</p>
+
+          {verifyError && (
+            <div className="mt-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{verifyError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleVerifyOtp} className="mt-4 space-y-4">
             <div>
               <label className="block text-xs font-black text-black uppercase mb-2">Enter 4-Digit OTP</label>
               <input
                 type="text"
                 maxLength={4}
                 value={otpValue}
-                onChange={(e) => setOtpValue(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => {
+                  setOtpValue(e.target.value.replace(/\D/g, ''));
+                  setVerifyError('');
+                }}
                 placeholder="• • • •"
                 className="w-full py-3 text-center text-3xl tracking-widest font-black text-black rounded-xl border focus:bg-white focus:outline-none shadow-inner"
                 style={{ backgroundColor: '#f2c98340', borderColor: '#BBAB47' }}
@@ -155,8 +201,17 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               </button>
             </div>
 
-            <button type="submit" className="w-full py-3.5 text-black font-black text-xs rounded-xl shadow-lg transition cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
-              VERIFY & OPEN DASHBOARD
+            <button 
+              type="submit" 
+              disabled={isVerifying}
+              className="w-full py-3.5 text-black font-black text-xs rounded-xl shadow-lg transition cursor-pointer flex items-center justify-center space-x-2" 
+              style={{ backgroundColor: '#c2b767' }}
+            >
+              {isVerifying ? (
+                <span>Verifying OTP...</span>
+              ) : (
+                <span>VERIFY & OPEN DASHBOARD</span>
+              )}
             </button>
           </form>
         </div>

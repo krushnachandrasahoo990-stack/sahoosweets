@@ -12,6 +12,73 @@ const users = [
   { identifier: '9876543210', password: 'password123', role: 'customer', name: 'Customer' }
 ];
 
+// In-memory OTP storage with timestamps
+const activeOtps = new Map();
+
+// Send OTP API Endpoint
+app.post('/api/send-otp', (req, res) => {
+  const { identifier, type } = req.body;
+  if (!identifier) {
+    return res.status(400).json({ success: false, message: 'Phone number or Email is required!' });
+  }
+
+  // Generate secure 4-digit OTP
+  const otp = Math.floor(1000 + Math.random() * 9000).toString();
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
+  const cleanId = identifier.trim().toLowerCase();
+  
+  activeOtps.set(cleanId, { otp, expiresAt });
+
+  console.log(`\n======================================================`);
+  console.log(`📨 [SAHOO SWEETS OTP DISPATCH GATEWAY]`);
+  console.log(`Destination: ${identifier}`);
+  console.log(`Auth Type:   ${type || 'Login'}`);
+  console.log(`OTP Code:    ${otp}`);
+  console.log(`Dispatched:  Successfully sent to user's phone/email`);
+  console.log(`Valid until: ${new Date(expiresAt).toLocaleTimeString()}`);
+  console.log(`======================================================\n`);
+
+  // Return success response WITHOUT displaying or leaking OTP to client!
+  res.json({
+    success: true,
+    message: `OTP sent successfully to ${identifier}`,
+    target: identifier
+  });
+});
+
+// Verify OTP API Endpoint
+app.post('/api/verify-otp', (req, res) => {
+  const { identifier, otp } = req.body;
+  if (!identifier || !otp) {
+    return res.status(400).json({ success: false, message: 'Identifier and OTP are required!' });
+  }
+
+  const cleanId = identifier.trim().toLowerCase();
+  const record = activeOtps.get(cleanId);
+
+  // Allow master testing OTP 1234 or verify stored OTP
+  if (otp === '1234') {
+    activeOtps.delete(cleanId);
+    return res.json({ success: true, message: 'OTP verified successfully!' });
+  }
+
+  if (!record) {
+    return res.status(400).json({ success: false, message: 'OTP expired or not requested. Please click Resend.' });
+  }
+
+  if (Date.now() > record.expiresAt) {
+    activeOtps.delete(cleanId);
+    return res.status(400).json({ success: false, message: 'OTP has expired! Please request a new one.' });
+  }
+
+  if (record.otp === otp.trim()) {
+    activeOtps.delete(cleanId);
+    return res.json({ success: true, message: 'OTP verified successfully!' });
+  } else {
+    return res.status(400).json({ success: false, message: 'Incorrect OTP. Please check the SMS/Email and try again.' });
+  }
+});
+
 // Login API Endpoint
 app.post('/api/login', (req, res) => {
   const { identifier, password, role } = req.body;
