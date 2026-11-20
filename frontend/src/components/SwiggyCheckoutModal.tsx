@@ -260,11 +260,11 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
       total: finalPayable,
       sahooMoneyUsed: sahooMoneyApplied,
       pointsEarned: earnableRewardPoints,
-      statusIndex: 1, // 0: Placed, 1: Confirmed & Preparing, 2: Partner Assigned, 3: On The Way, 4: Delivered
+      statusIndex: 0, // 0: Order Confirmed, 1: Placed, 2: Preparing/Shipped, 3: Out for Delivery, 4: Delivered
       steps: [
-        "Order Received",
-        "Kitchen is Packing",
-        "Delivery Partner Assigned",
+        "Order Confirmed",
+        "Placed",
+        "Preparing/Shipped",
         "Out for Delivery",
         "Delivered"
       ],
@@ -873,8 +873,8 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     { id: 'UPI', label: 'UPI (Instant)', icon: '⚡' },
-                    { id: 'CARD', label: 'Cards (Visa/MC)', icon: '💳' },
-                    { id: 'WALLET', label: 'Wallets', icon: '👛' },
+                    { id: 'WALLET', label: 'Sahoo Wallet & Apps', icon: '👛' },
+                    { id: 'CARD', label: 'Credit / Debit Card', icon: '💳' },
                     { id: 'NETBANKING', label: 'Net Banking', icon: '🏛️' },
                     { id: 'COD', label: 'Cash on Delivery', icon: '💵' }
                   ].map(m => (
@@ -902,9 +902,9 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                 {paymentMethod === 'UPI' && (
                   <div className="border-t pt-4 space-y-4">
                     <div>
-                      <p className="text-xs font-extrabold text-gray-700 mb-2">Popular UPI Apps:</p>
+                      <p className="text-xs font-extrabold text-gray-700 mb-2">Select Preferred UPI App:</p>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {['Google Pay', 'PhonePe', 'Paytm', 'BHIM UPI'].map(app => (
+                        {['Google Pay (GPay)', 'PhonePe', 'Paytm', 'Amazon Pay'].map(app => (
                           <button
                             key={app}
                             onClick={() => {
@@ -921,6 +921,19 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                           </button>
                         ))}
                       </div>
+
+                      {/* Pay via selected app button */}
+                      {!showQrBox && (
+                        <button
+                          type="button"
+                          onClick={handlePlaceOrder}
+                          disabled={isProcessing}
+                          className="w-full mt-3 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center space-x-2 transition cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Pay ₹{finalPayable} via {selectedUpiApp} & Confirm Order</span>
+                        </button>
+                      )}
                     </div>
 
                     {/* Or Dynamic QR Code */}
@@ -928,8 +941,8 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                       <div className="flex items-center space-x-2.5">
                         <QrCode className="w-5 h-5 text-amber-700" />
                         <div>
-                          <p className="text-xs font-black text-gray-900">Scan Dynamic UPI QR</p>
-                          <p className="text-[10px] text-gray-600">Pay using any UPI app on phone</p>
+                          <p className="text-xs font-black text-gray-900">Scan Dynamic UPI QR Code</p>
+                          <p className="text-[10px] text-gray-600">Scan using GPay, PhonePe, Paytm or any UPI app</p>
                         </div>
                       </div>
                       <button
@@ -938,7 +951,7 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                           showQrBox ? 'bg-amber-700 text-white' : 'bg-white border border-amber-300 text-amber-800'
                         }`}
                       >
-                        {showQrBox ? 'Hide QR' : 'Show QR'}
+                        {showQrBox ? 'Hide QR' : 'Show Live QR'}
                       </button>
                     </div>
 
@@ -954,6 +967,15 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                         <p className="text-[11px] font-extrabold text-gray-700">
                           Scan & Pay ₹{finalPayable} to <span className="text-orange-600 font-black">sahoosweets@upi</span>
                         </p>
+                        <button
+                          type="button"
+                          onClick={handlePlaceOrder}
+                          disabled={isProcessing}
+                          className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center space-x-2 transition cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Simulate Payment Success (Testing)</span>
+                        </button>
                       </div>
                     )}
 
@@ -1040,14 +1062,46 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                       placeholder="Name on Card"
                       className="w-full text-xs p-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-orange-500 font-medium"
                     />
+
+                    <button
+                      type="button"
+                      onClick={handlePlaceOrder}
+                      disabled={isProcessing}
+                      className="w-full mt-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center space-x-2 transition cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Pay ₹{finalPayable} via Card & Confirm Order</span>
+                    </button>
                   </div>
                 )}
 
                 {/* --- 3. WALLETS --- */}
                 {paymentMethod === 'WALLET' && (
-                  <div className="border-t pt-4 space-y-2">
-                    <p className="text-xs font-bold text-gray-700">Select Wallet Partner:</p>
-                    {['Paytm Wallet', 'Amazon Pay Balance', 'PhonePe Wallet', 'MobiKwik'].map(w => (
+                  <div className="border-t pt-4 space-y-3">
+                    {/* Sahoo Money Wallet direct pay card */}
+                    <div className="p-3.5 rounded-2xl border-2 bg-orange-50/70 border-orange-300 flex items-center justify-between">
+                      <div className="flex items-center space-x-2.5">
+                        <span className="text-xl">👛</span>
+                        <div>
+                          <p className="text-xs font-black text-gray-900">Sahoo Money Wallet</p>
+                          <p className="text-[10px] text-gray-600">Available Balance: ₹{sahooMoneyBalance.toFixed(2)}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUseSahooMoney(true);
+                          handlePlaceOrder();
+                        }}
+                        disabled={isProcessing || sahooMoneyBalance <= 0}
+                        className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs rounded-xl shadow-xs transition cursor-pointer disabled:opacity-40"
+                      >
+                        1-Click Pay
+                      </button>
+                    </div>
+
+                    <p className="text-xs font-bold text-gray-700">Or Select Wallet Partner:</p>
+                    {['Amazon Pay Balance', 'Paytm Wallet', 'PhonePe Wallet', 'MobiKwik'].map(w => (
                       <div
                         key={w}
                         onClick={() => setSelectedWallet(w)}
@@ -1061,6 +1115,16 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                         {selectedWallet === w && <Check className="w-4 h-4 text-orange-600" />}
                       </div>
                     ))}
+
+                    <button
+                      type="button"
+                      onClick={handlePlaceOrder}
+                      disabled={isProcessing}
+                      className="w-full mt-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center space-x-2 transition cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Pay ₹{finalPayable} via {selectedWallet} & Confirm Order</span>
+                    </button>
                   </div>
                 )}
 
@@ -1083,17 +1147,36 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
                         </button>
                       ))}
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={handlePlaceOrder}
+                      disabled={isProcessing}
+                      className="w-full mt-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center space-x-2 transition cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Pay ₹{finalPayable} via {selectedBank}</span>
+                    </button>
                   </div>
                 )}
 
                 {/* --- 5. CASH ON DELIVERY --- */}
                 {paymentMethod === 'COD' && (
                   <div className="border-t pt-4 space-y-3">
-                    <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 space-y-1">
-                      <p className="text-xs font-black text-amber-900">💵 Pay Cash or UPI on Delivery</p>
+                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 space-y-2">
+                      <p className="text-xs font-black text-amber-900">💵 Cash on Delivery (COD)</p>
                       <p className="text-[11px] text-amber-800 leading-snug">
                         Keep exact cash of ₹{finalPayable} ready or scan the delivery partner's QR code at your door.
                       </p>
+                      <button
+                        type="button"
+                        onClick={handlePlaceOrder}
+                        disabled={isProcessing}
+                        className="w-full mt-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center space-x-2 transition cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Confirm Cash on Delivery Order (Instant)</span>
+                      </button>
                     </div>
                   </div>
                 )}

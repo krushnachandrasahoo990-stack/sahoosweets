@@ -2,14 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, LayoutGrid, MapPin, Wallet, RotateCcw, Coins, Heart, 
   FileText, Crown, Star, Settings, HelpCircle, ChevronDown, 
-  ChevronLeft, ArrowRight, ShoppingBag, X, Plus, Home, BookOpen, LogOut, Trash2, PhoneCall, CheckCircle2, User, Edit3, Truck, XCircle, Eye, CreditCard, ShieldCheck, Download, QrCode, Timer, RefreshCw, Send, Sparkles, Navigation 
+  ChevronLeft, ArrowRight, ShoppingBag, X, Plus, Home, BookOpen, LogOut, 
+  Trash2, PhoneCall, CheckCircle2, User, Edit3, Truck, XCircle, Eye, 
+  CreditCard, ShieldCheck, Download, QrCode, Timer, RefreshCw, Send, Sparkles, Navigation,
+  Package, Check, AlertCircle, ToggleLeft, ToggleRight, Coffee, ChefHat
 } from 'lucide-react';
 import SwiggyVegBadge from '../components/SwiggyVegBadge';
 import SwiggyCheckoutModal from '../components/SwiggyCheckoutModal';
 import SwiggyLiveTracking from '../components/SwiggyLiveTracking';
 import SwiggyRatingModal from '../components/SwiggyRatingModal';
 
-export default function Dashboard() {
+interface DashboardProps {
+  userRole?: 'customer' | 'admin';
+  onLogout?: () => void;
+  onSwitchRole?: (role: 'customer' | 'admin') => void;
+}
+
+export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRole }: DashboardProps) {
   const allProducts = [
     { id: "sw1", name: "Pahala Style Rosgola", category: "sweets", badge: "BESTSELLER", rating: 4.9, reviews: "260+", desc: "Super spongy, melt-in-mouth cottage cheese balls soaked in authentic warm sugar syrup.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQtwZakNUCDCTGm30bOrOk45IbALQwlXluQBXtq3uCQ-w&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }] },
     { id: "sw2", name: "Shahi Gulab Jamun", category: "sweets", badge: "HOT SWEET", rating: 4.8, reviews: "190+", desc: "Deep-fried golden khoya dumplings simmered in fragrant cardamom sugar syrup.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRZI8sJv8_Go96Hn3rFD6JiVIElf8mCd1i2bg2uu2E2CA&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }] },
@@ -48,47 +57,39 @@ export default function Dashboard() {
   const [currentFilter, setCurrentFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('COD'); // Options: COD, UPI QR, GPay, PhonePe, Paytm, Amazon Pay
 
-  // QR Modal and Timer state
-  const [showQrModal, setShowQrModal] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes (300 seconds)
-
-  useEffect(() => {
-    let timer: any;
-    if (showQrModal && timeLeft > 0) {
-      timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-    } else if (timeLeft === 0 && showQrModal) {
-      alert('Payment session expired. Please try again.');
-      setShowQrModal(false);
-      setTimeLeft(300);
-    }
-    return () => clearInterval(timer);
-  }, [showQrModal, timeLeft]);
-
-  // Account profile state
-  const [userProfile, setUserProfile] = useState(() => {
-    try {
-      const saved = localStorage.getItem('sahooUserProfile');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return { name: "Krushna Chandra Sahoo", phone: "9078699528", email: "krushnachandrasahoo990@gmail.com", role: "Customer" };
+  // Out of stock tracking managed by Admin
+  const [outOfStockItems, setOutOfStockItems] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('sahooOutOfStockItems') || '[]'); } catch { return []; }
   });
-  const [isEditingAccount, setIsEditingAccount] = useState(false);
-  const [editName, setEditName] = useState(userProfile.name);
-  const [editPhone, setEditPhone] = useState(userProfile.phone);
-  const [editEmail, setEditEmail] = useState(userProfile.email);
 
-  // Address list state
   const [addressList, setAddressList] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('sahooAddressList');
       if (saved) return JSON.parse(saved);
     } catch {}
     return [
-      { id: 1, name: "Krushna Sahoo", phone: "9078699528", address: "At/Po - Nagapur, Brahmagiri Road", city: "Puri", state: "Odisha", pin: "752001", isDefault: true }
+      { id: 1, name: "Krushna Chandra Sahoo", phone: "9078699528", address: "At/Po - Nagapur, Brahmagiri Road", city: "Puri", state: "Odisha", pin: "752001", isDefault: true },
+      { id: 2, name: "Sahoo Sweets Counter", phone: "9078699528", address: "Grand Road, Near Jagannath Temple", city: "Puri", state: "Odisha", pin: "752001", isDefault: false }
     ];
   });
+
+  const [userProfile, setUserProfile] = useState<any>(() => {
+    try {
+      const saved = localStorage.getItem('sahooUserProfile');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      name: "Krushna Chandra Sahoo",
+      phone: "9078699528",
+      email: "krushnachandrasahoo990@gmail.com"
+    };
+  });
+
+  const [isEditingAccount, setIsEditingAccount] = useState(false);
+  const [editName, setEditName] = useState(userProfile?.name || 'Krushna Chandra Sahoo');
+  const [editPhone, setEditPhone] = useState(userProfile?.phone || '9078699528');
+  const [editEmail, setEditEmail] = useState(userProfile?.email || 'krushnachandrasahoo990@gmail.com');
 
   const [showAddAddressModal, setShowAddAddressModal] = useState(false);
   const [newName, setNewName] = useState('');
@@ -98,7 +99,7 @@ export default function Dashboard() {
   const [newState, setNewState] = useState('Odisha');
   const [newPin, setNewPin] = useState('752001');
 
-  // Past orders with interactive timeline tracker & detail modal state
+  // Past orders with step-by-step timeline: Order Confirmed -> Placed -> Preparing/Shipped -> Out for Delivery -> Delivered
   const [pastOrders, setPastOrders] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('sahooPastOrders');
@@ -110,11 +111,11 @@ export default function Dashboard() {
     return [
       { 
         id: "SS-1084", 
-        date: "Nov 13, 2026", 
+        date: "Nov 18, 2026, 02:40 PM", 
         items: "Pahala Style Rosgola (1 Kg), Bara (4 Pcs)", 
         total: 370, 
         statusIndex: 3, 
-        steps: ["Order Confirmed", "Placed", "Shipped", "Out for Delivery", "Delivered"],
+        steps: ["Order Confirmed", "Placed", "Preparing/Shipped", "Out for Delivery", "Delivered"],
         payment: "Cash on Delivery",
         address: "At/Po - Nagapur, Brahmagiri Road, Puri, Odisha - 752001"
       }
@@ -184,6 +185,10 @@ export default function Dashboard() {
     try { localStorage.setItem('sahooRewardsHistory', JSON.stringify(rewardsHistory)); } catch {}
   }, [rewardsHistory]);
 
+  useEffect(() => {
+    try { localStorage.setItem('sahooOutOfStockItems', JSON.stringify(outOfStockItems)); } catch {}
+  }, [outOfStockItems]);
+
   // Price-wise points calculation helper: 1 point for every ₹10
   const getItemPoints = (price: number): number => {
     return Math.max(1, Math.floor(price / 10));
@@ -207,12 +212,12 @@ export default function Dashboard() {
 
     setMoneyHistory(prev => [
       { id: Date.now(), type: 'credit', title: `Converted from ${pts} Partner Rewards`, amount: moneyToAdd, date: nowStr },
-      ...prev
+      ...(Array.isArray(prev) ? prev : [])
     ]);
 
     setRewardsHistory(prev => [
       { id: Date.now() + 1, type: 'converted', title: `Converted to Sahoo Money (₹${moneyToAdd})`, points: -pts, date: nowStr },
-      ...prev
+      ...(Array.isArray(prev) ? prev : [])
     ]);
 
     alert(`🎉 Success! ${pts} Partner Reward Points converted into ₹${moneyToAdd} Sahoo Money wallet cash!`);
@@ -223,7 +228,7 @@ export default function Dashboard() {
     const nowStr = new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
     setMoneyHistory(prev => [
       { id: Date.now(), type: 'credit', title: `Recharged via UPI / Netbanking`, amount, date: nowStr },
-      ...prev
+      ...(Array.isArray(prev) ? prev : [])
     ]);
     alert(`₹${amount} added successfully to your Sahoo Money Wallet!`);
   };
@@ -233,7 +238,7 @@ export default function Dashboard() {
     const nowStr = new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
     setMoneyHistory(prev => [
       { id: Date.now(), type: 'debit', title: `Used on Order Checkout`, amount, date: nowStr },
-      ...prev
+      ...(Array.isArray(prev) ? prev : [])
     ]);
   };
 
@@ -242,24 +247,34 @@ export default function Dashboard() {
     const nowStr = new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
     setRewardsHistory(prev => [
       { id: Date.now(), type: 'earned', title: `Earned from Order Purchase`, points, date: nowStr },
-      ...prev
+      ...(Array.isArray(prev) ? prev : [])
     ]);
   };
 
-  const defaultAddrObj = addressList.find((a: any) => a?.isDefault) || addressList[0];
+  // Toggle item in-stock status (Admin function)
+  const toggleItemStock = (id: string) => {
+    setOutOfStockItems(prev => {
+      const exists = prev.includes(id);
+      return exists ? prev.filter(x => x !== id) : [...prev, id];
+    });
+  };
+
+  const defaultAddrObj = (addressList || []).find((a: any) => a?.isDefault) || (addressList || [])[0] || {
+    id: 1, name: "Krushna Chandra Sahoo", phone: "9078699528", address: "At/Po - Nagapur", city: "Puri", pin: "752001"
+  };
   const currentHeaderAddressString = defaultAddrObj ? `${defaultAddrObj.address}, ${defaultAddrObj.city} - ${defaultAddrObj.pin}` : "At/Po - Nagapur, Puri - 752001";
 
   const [selectedVariants, setSelectedVariants] = useState<{[key: string]: number}>(() => {
     const init: {[key: string]: number} = {};
-    allProducts.forEach(p => init[p.id] = 0);
+    (allProducts || []).forEach(p => init[p.id] = 0);
     return init;
   });
 
-  const [activePanel, setActivePanel] = useState('dashboard');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [activePanel, setActivePanel] = useState<string>(() => userRole === 'admin' ? 'admin' : 'dashboard');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
   const [isLocationOpen, setIsLocationOpen] = useState(false);
-  const [orderPlacedSuccess, setOrderPlacedSuccess] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem('sahooSweetsFavorites', JSON.stringify(favorites)); } catch {}
@@ -286,22 +301,26 @@ export default function Dashboard() {
   };
 
   const addToCartFromItem = (item: any) => {
+    if (outOfStockItems.includes(item.id)) {
+      alert('Sorry, this sweet/snack is currently out of stock.');
+      return;
+    }
     const vIndex = selectedVariants[item.id] || 0;
-    const variant = item.variants && item.variants[vIndex] ? item.variants[vIndex] : { label: 'Standard', price: 10 };
+    const variant = item?.variants && item.variants[vIndex] ? item.variants[vIndex] : { label: 'Standard', price: 10 };
     const key = `${item.name} (${variant.label})`;
 
     setCartData((prev: any[]) => {
-      const existing = prev.find((c: any) => c.name === key);
+      const existing = (prev || []).find((c: any) => c.name === key);
       if (existing) {
-        return prev.map((c: any) => c.name === key ? { ...c, qty: c.qty + 1 } : c);
+        return (prev || []).map((c: any) => c.name === key ? { ...c, qty: c.qty + 1 } : c);
       }
-      return [...prev, { id: item.id, name: key, price: variant.price, qty: 1, img: item.img }];
+      return [...(prev || []), { id: item.id, name: key, price: variant.price, qty: 1, img: item.img }];
     });
   };
 
   const updateCartQtyByKey = (key: string, delta: number) => {
     setCartData((prev: any[]) => {
-      return prev.map((c: any) => {
+      return (prev || []).map((c: any) => {
         if (c.name === key) {
           const newQty = c.qty + delta;
           return newQty > 0 ? { ...c, qty: newQty } : null;
@@ -313,7 +332,7 @@ export default function Dashboard() {
 
   const toggleFavorite = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    setFavorites((prev: string[]) => prev.includes(id) ? prev.filter((f: string) => f !== id) : [...prev, id]);
+    setFavorites((prev: string[]) => (prev || []).includes(id) ? prev.filter((f: string) => f !== id) : [...(prev || []), id]);
   };
 
   const handleAddNewAddressSubmit = (e: React.FormEvent) => {
@@ -330,27 +349,27 @@ export default function Dashboard() {
       city: newCity,
       state: newState,
       pin: newPin,
-      isDefault: addressList.length === 0
+      isDefault: (addressList || []).length === 0
     };
-    setAddressList((prev: any[]) => [...prev, newObj]);
+    setAddressList((prev: any[]) => [...(prev || []), newObj]);
     setNewName(''); setNewPhone(''); setNewAddr('');
     setShowAddAddressModal(false);
     alert('Address added successfully!');
   };
 
   const setDefaultAddress = (id: number) => {
-    setAddressList((prev: any[]) => prev.map((item: any) => ({
+    setAddressList((prev: any[]) => (prev || []).map((item: any) => ({
       ...item,
       isDefault: item.id === id
     })));
   };
 
   const deleteAddress = (id: number) => {
-    if (addressList.length <= 1) {
+    if ((addressList || []).length <= 1) {
       alert('You must keep at least one delivery address.');
       return;
     }
-    const filtered = addressList.filter((a: any) => a.id !== id);
+    const filtered = (addressList || []).filter((a: any) => a.id !== id);
     if (!filtered.some((a: any) => a.isDefault)) {
       filtered[0].isDefault = true;
     }
@@ -364,12 +383,50 @@ export default function Dashboard() {
     alert('Account details updated successfully!');
   };
 
+  // Order cancellation when eligible
   const cancelOrder = (orderId: string) => {
-    setPastOrders((prev: any[]) => prev.map((o: any) => o.id === orderId ? { ...o, statusIndex: -1 } : o));
+    setPastOrders((prev: any[]) => (prev || []).map((o: any) => {
+      if (o.id === orderId) {
+        return { ...o, statusIndex: -1 };
+      }
+      return o;
+    }));
+    alert(`Order #${orderId} has been cancelled successfully.`);
   };
 
-  const filteredProducts = allProducts.filter(item => {
-    if (currentFilter === 'favorites' && !favorites.includes(item.id)) return false;
+  // Update order status (Admin & Tracking simulator)
+  const handleUpdateOrderStatus = (orderId: string, newStatusIndex: number) => {
+    setPastOrders((prev: any[]) => (prev || []).map((o: any) => {
+      if (o.id === orderId) {
+        return { ...o, statusIndex: newStatusIndex };
+      }
+      return o;
+    }));
+    if (activeTrackingOrder && activeTrackingOrder.id === orderId) {
+      setActiveTrackingOrder((prev: any) => ({ ...prev, statusIndex: newStatusIndex }));
+    }
+  };
+
+  const handleReorder = (order: any) => {
+    if (!order) return;
+    if (Array.isArray(order.itemsList) && order.itemsList.length > 0) {
+      order.itemsList.forEach((it: any) => {
+        setCartData(prev => {
+          const existing = (prev || []).find(c => c.name === it.name);
+          if (existing) {
+            return (prev || []).map(c => c.name === it.name ? { ...c, qty: c.qty + it.qty } : c);
+          }
+          return [...(prev || []), { name: it.name, price: it.price, qty: it.qty, img: it.img }];
+        });
+      });
+    } else {
+      setCartData(prev => [...(prev || []), { name: order.items || 'Sahoo Sweets Special Box', price: order.total || 100, qty: 1 }]);
+    }
+    setIsCartOpen(true);
+  };
+
+  const filteredProducts = (allProducts || []).filter(item => {
+    if (currentFilter === 'favorites' && !(favorites || []).includes(item.id)) return false;
     if (currentFilter !== 'all' && currentFilter !== 'favorites') {
       if (item.category !== currentFilter) return false;
     }
@@ -378,66 +435,53 @@ export default function Dashboard() {
       if (term === 'sweets' || term === 'sweet' || term === 'mitha') {
         return item.category === 'sweets';
       }
+      if (term === 'breakfast' || term === 'snacks' || term === 'tiffin') {
+        return item.category === 'breakfast';
+      }
       return item.name.toLowerCase().includes(term) || item.desc.toLowerCase().includes(term);
     }
     return true;
   });
 
-  const totalCartCount = cartData.reduce((sum: number, item: any) => sum + item.qty, 0);
-  const totalCartAmount = cartData.reduce((sum: number, item: any) => sum + (item.price * item.qty), 0);
-  
-  const discountAmount = totalCartAmount >= 5000 ? 50 : 0;
-  const finalPayable = Math.max(0, totalCartAmount - discountAmount);
+  const totalCartCount = (cartData || []).reduce((sum: number, item: any) => sum + item.qty, 0);
+  const totalCartAmount = (cartData || []).reduce((sum: number, item: any) => sum + (item.price * item.qty), 0);
 
-  // Find active order for real-time live GPS tracking
+  // Find active order for real-time live GPS tracking (not delivered and not cancelled)
   const activeOrder = Array.isArray(pastOrders) 
     ? pastOrders.find((o: any) => o && typeof o.statusIndex === 'number' && o.statusIndex >= 0 && o.statusIndex < 4) 
     : null;
 
+  // Food delivery flow: right after order confirmation, jump to orders view and launch tracking!
   const handleOrderSuccess = (newOrder: any) => {
     setPastOrders((prev: any[]) => [newOrder, ...(Array.isArray(prev) ? prev : [])]);
     setIsCartOpen(false);
-    setActiveTrackingOrder(newOrder); // immediately launches live Swiggy GPS tracking!
+    setActivePanel('orders'); // Jump directly to Order Tracking view
+    setActiveTrackingOrder(newOrder); // Immediately launch live GPS tracking map
   };
 
-  const handleReorder = (order: any) => {
-    if (order.itemsList && Array.isArray(order.itemsList) && order.itemsList.length > 0) {
-      setCartData(order.itemsList);
-    } else if (typeof order.items === 'string') {
-      const itemParts = order.items.split(', ');
-      const newCartItems = itemParts.map((part: string) => {
-        const match = part.match(/^(.*?)(?: \(x?(\d+)\))?$/);
-        const name = match ? match[1] : part;
-        const qty = match && match[2] ? parseInt(match[2]) : 1;
-        return {
-          name,
-          price: Math.max(10, Math.floor((order.total || 200) / itemParts.length)),
-          qty: qty || 1,
-          img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQtwZakNUCDCTGm30bOrOk45IbALQwlXluQBXtq3uCQ-w&s=10"
-        };
-      });
-      setCartData(newCartItems);
-    }
-    setIsCartOpen(true);
+  const handleRateOrderSubmit = (orderId: string, ratingVal: number, feedback: string) => {
+    setPastOrders((prev: any[]) => (prev || []).map((o: any) => o.id === orderId ? { ...o, rating: ratingVal, feedback } : o));
+    setRatingOrder(null);
+    alert('Thank you for your valuable feedback! 5 Partner Reward Points credited.');
+    handleEarnRewardPoints(5);
   };
 
-  const handleUpdateOrderStatus = (orderId: string, newStatusIndex: number) => {
-    setPastOrders((prev: any[]) => prev.map((o: any) => o.id === orderId ? { ...o, statusIndex: newStatusIndex } : o));
-    if (activeTrackingOrder && activeTrackingOrder.id === orderId) {
-      setActiveTrackingOrder((prev: any) => prev ? { ...prev, statusIndex: newStatusIndex } : null);
-    }
-  };
-
-  const handleRateOrderSubmit = (orderId: string, rating: number, feedback: string) => {
-    setPastOrders((prev: any[]) => prev.map((o: any) => o.id === orderId ? { ...o, rating, feedback } : o));
-  };
+  // Analytics for Admin
+  const totalRevenue = (pastOrders || []).filter(o => o.statusIndex !== -1).reduce((sum, o) => sum + (o.total || 0), 0);
+  const activeOrdersCount = (pastOrders || []).filter(o => o.statusIndex >= 0 && o.statusIndex < 4).length;
+  const deliveredOrdersCount = (pastOrders || []).filter(o => o.statusIndex === 4).length;
 
   return (
     <div className="font-sans h-screen flex flex-col justify-between overflow-hidden selection:bg-orange-500 selection:text-white" style={{ backgroundColor: '#f2c983' }}>
 
       <div className="flex flex-1 overflow-hidden relative">
 
-        <aside id="astraSidebar" className={`bg-[#0f1319] text-gray-300 flex flex-col justify-between relative z-40 shrink-0 select-none shadow-2xl border-r border-gray-800 transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
+        {/* ========================================================
+            DESKTOP & TABLET SIDEBAR (>= 640px)
+            Collapsible on Tablet (640px - 1023px), Persistent on Desktop (>= 1024px)
+            Hidden on Mobile (< 640px) in favor of bottom quick bar
+        ======================================================== */}
+        <aside id="sahooSidebar" className={`hidden sm:flex bg-[#0f1319] text-gray-300 flex-col justify-between relative z-40 shrink-0 select-none shadow-2xl border-r border-gray-800 transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}>
           <button 
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
             className="absolute -right-3.5 top-7 z-50 w-7 h-7 rounded-full bg-[#232936] text-gray-200 border border-gray-700 flex items-center justify-center shadow-lg transition cursor-pointer"
@@ -447,6 +491,7 @@ export default function Dashboard() {
           </button>
 
           <div className="p-3.5 space-y-4 flex-1 overflow-y-auto">
+            {/* Brand Logo & Title */}
             <div className="flex items-center space-x-3 px-2 pt-1">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-base shadow-md shrink-0" style={{ backgroundColor: '#c2b767' }}>SS</div>
               {!isSidebarCollapsed && (
@@ -457,39 +502,80 @@ export default function Dashboard() {
               )}
             </div>
 
+            {/* Role Switcher Pill */}
+            {!isSidebarCollapsed && (
+              <div className="px-1">
+                <div className="p-2 bg-[#191f28] rounded-xl border border-gray-800 flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5 overflow-hidden">
+                    <span className="text-xs">{userRole === 'admin' ? '👑' : '🛍️'}</span>
+                    <span className="text-[11px] font-black text-white truncate uppercase">
+                      {userRole === 'admin' ? 'Admin Portal' : 'Customer Store'}
+                    </span>
+                  </div>
+                  {onSwitchRole && (
+                    <button
+                      onClick={() => onSwitchRole(userRole === 'admin' ? 'customer' : 'admin')}
+                      className="text-[9px] font-black bg-amber-500 hover:bg-amber-600 text-black px-2 py-0.5 rounded-md transition cursor-pointer"
+                    >
+                      Switch
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Quick Search inside Sidebar */}
             <div className="flex items-center bg-[#191f28] border border-gray-800 rounded-xl px-3 py-2 cursor-pointer transition">
               <Search className="w-4 h-4 text-gray-400 shrink-0" />
               {!isSidebarCollapsed && <input type="text" placeholder="Search Samosa, Rosgola..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setActivePanel('dashboard'); }} className="bg-transparent text-xs text-gray-200 placeholder-gray-500 focus:outline-none ml-2.5 w-full" />}
             </div>
 
+            {/* Navigation Links */}
             <div className="space-y-1">
               {!isSidebarCollapsed && <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 px-2.5 mb-1.5">Main Menu</p>}
+              
+              {/* Admin Panel button if role === 'admin' */}
+              {userRole === 'admin' && (
+                <button 
+                  onClick={() => setActivePanel('admin')} 
+                  className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition cursor-pointer ${activePanel === 'admin' ? 'bg-amber-500 text-black font-black' : 'text-amber-400 hover:bg-amber-950/40'}`}
+                >
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
+                  {!isSidebarCollapsed && (
+                    <div className="flex items-center justify-between flex-1 overflow-hidden">
+                      <span className="truncate">Admin Operations</span>
+                      <span className="text-[9px] font-black bg-black text-amber-400 px-1.5 py-0.2 rounded-md">LIVE</span>
+                    </div>
+                  )}
+                </button>
+              )}
+
               {[
-                { id: 'dashboard', label: 'Dashboard (Menu)', icon: LayoutGrid, color: 'text-amber-500' },
-                { id: 'orders', label: 'Past Orders & Track', icon: Truck, color: 'text-emerald-400' },
+                { id: 'dashboard', label: 'Storefront (Menu)', icon: LayoutGrid, color: 'text-amber-500' },
+                { id: 'orders', label: 'Live Orders & Track', icon: Truck, color: 'text-emerald-400', badge: activeOrdersCount > 0 ? `${activeOrdersCount} Live` : undefined },
                 { id: 'payments', label: 'Payment Modes', icon: Wallet },
+                { id: 'money', label: 'Sahoo Money', icon: Coins, amount: `₹${sahooMoneyBalance}` },
+                { id: 'rewards', label: 'Partner Rewards', icon: Crown, color: 'text-amber-400', amount: `🪙 ${rewardPoints}` },
                 { id: 'refunds', label: 'My Refunds', icon: RotateCcw },
-                { id: 'money', label: 'Sahoo Money', icon: Coins },
-                { id: 'statements', label: 'Account Statements', icon: FileText },
-                { id: 'rewards', label: 'Partner Rewards', icon: Crown, color: 'text-amber-400' }
+                { id: 'statements', label: 'Invoices & Receipts', icon: FileText }
               ].map(item => (
                 <button 
                   key={item.id} 
                   onClick={() => { setActivePanel(item.id); if(item.id === 'dashboard') setCurrentFilter('all'); }} 
-                  className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition cursor-pointer ${activePanel === item.id ? 'bg-[#232936] text-white font-bold' : 'text-gray-400'}`}
+                  className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition cursor-pointer ${activePanel === item.id ? 'bg-[#232936] text-white font-bold' : 'text-gray-400 hover:text-white'}`}
                 >
                   <item.icon className={`w-4 h-4 shrink-0 ${item.color || ''}`} />
                   {!isSidebarCollapsed && (
                     <div className="flex items-center justify-between flex-1 overflow-hidden">
                       <span className="truncate">{item.label}</span>
-                      {item.id === 'money' && (
+                      {item.amount && (
                         <span className="text-[10px] font-black bg-orange-950 text-orange-400 px-1.5 py-0.2 rounded-md">
-                          ₹{sahooMoneyBalance}
+                          {item.amount}
                         </span>
                       )}
-                      {item.id === 'rewards' && (
-                        <span className="text-[10px] font-black bg-amber-950 text-amber-400 px-1.5 py-0.2 rounded-md">
-                          🪙 {rewardPoints}
+                      {item.badge && (
+                        <span className="text-[9px] font-black bg-emerald-900 text-emerald-300 px-1.5 py-0.2 rounded-md animate-pulse">
+                          {item.badge}
                         </span>
                       )}
                     </div>
@@ -499,6 +585,7 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Sidebar Footer */}
           <div className="p-3 border-t border-gray-800 bg-[#0b0e13] space-y-1">
             <button 
               onClick={() => setActivePanel('account')} 
@@ -517,7 +604,10 @@ export default function Dashboard() {
             </button>
 
             <button 
-              onClick={() => { localStorage.clear(); window.location.reload(); }} 
+              onClick={() => {
+                if (onLogout) onLogout();
+                else { localStorage.clear(); window.location.reload(); }
+              }} 
               className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-950/30 transition cursor-pointer"
             >
               <LogOut className="w-4 h-4 shrink-0" />
@@ -526,67 +616,107 @@ export default function Dashboard() {
           </div>
         </aside>
 
-        <div className="flex-1 flex flex-col h-full overflow-y-auto relative bg-white">
+        {/* ========================================================
+            MAIN CONTENT AREA (RESPONSIVE)
+        ======================================================== */}
+        <div className="flex-1 flex flex-col h-full overflow-y-auto relative bg-white pb-16 sm:pb-0">
           
-          <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md shadow-sm border-b px-4 sm:px-8 h-20 flex items-center justify-between gap-3 shrink-0" style={{ borderColor: '#BBAB47' }}>
-            <div onClick={() => setIsLocationOpen(true)} className="flex flex-col cursor-pointer group">
-              <div className="flex items-center space-x-2">
-                <h1 className="text-lg sm:text-2xl font-black tracking-tight uppercase leading-none" style={{ color: '#c2b767', fontFamily: 'Georgia, serif', textShadow: '0.5px 0.5px 1px rgba(0,0,0,0.1)' }}>SAHOO SWEETS</h1>
-                <span className="hidden sm:inline-block px-2 py-0.5 text-[9px] font-black rounded-md uppercase tracking-wider" style={{ backgroundColor: '#f2c983', color: '#c2b767' }}>Sweets & Snacks Hub</span>
+          {/* HEADER (MOBILE, TABLET & DESKTOP) */}
+          <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md shadow-xs border-b px-3 sm:px-8 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-3 shrink-0" style={{ borderColor: '#BBAB47' }}>
+            
+            {/* Left: Brand title & Location */}
+            <div onClick={() => setIsLocationOpen(true)} className="flex flex-col cursor-pointer group shrink-0">
+              <div className="flex items-center space-x-1.5 sm:space-x-2">
+                <div className="sm:hidden w-7 h-7 rounded-lg flex items-center justify-center text-white font-black text-xs shadow-xs" style={{ backgroundColor: '#c2b767' }}>SS</div>
+                <h1 className="text-base sm:text-2xl font-black tracking-tight uppercase leading-none" style={{ color: '#c2b767', fontFamily: 'Georgia, serif' }}>SAHOO SWEETS</h1>
+                <span className="hidden md:inline-block px-2 py-0.5 text-[9px] font-black rounded-md uppercase tracking-wider" style={{ backgroundColor: '#f2c983', color: '#c2b767' }}>Sweets & Snacks Hub</span>
               </div>
-              <div className="flex items-center text-xs font-semibold text-gray-600 transition mt-1">
-                <MapPin className="w-3.5 h-3.5 mr-1 shrink-0" style={{ color: '#c2b767' }} />
-                <span className="font-bold text-gray-900 truncate max-w-[200px] sm:max-w-xs">{currentHeaderAddressString}</span>
-                <ChevronDown className="w-3.5 h-3.5 ml-1 shrink-0" style={{ color: '#c2b767' }} />
+              <div className="flex items-center text-[11px] sm:text-xs font-semibold text-gray-600 transition mt-0.5 sm:mt-1">
+                <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 shrink-0 text-amber-700" />
+                <span className="font-bold text-gray-900 truncate max-w-[140px] sm:max-w-xs">{currentHeaderAddressString}</span>
+                <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 ml-1 shrink-0 text-gray-400" />
               </div>
             </div>
 
+            {/* Center: Search input on Tablet & Desktop */}
             <div className="flex-1 max-w-md hidden sm:block">
               <div className="relative">
-                <input type="text" placeholder="Search Samosa, Rosgola, Sweets..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setActivePanel('dashboard'); }} className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-gray-100 text-xs font-medium focus:outline-none focus:bg-white border border-transparent transition" />
+                <input 
+                  type="text" 
+                  placeholder="Search Samosa, Rosgola, Sweets..." 
+                  value={searchTerm} 
+                  onChange={e => { setSearchTerm(e.target.value); setActivePanel('dashboard'); }} 
+                  className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-gray-100 text-xs font-medium focus:outline-none focus:bg-white border border-transparent focus:border-amber-400 transition" 
+                />
                 <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
               </div>
             </div>
 
-            <nav className="flex items-center space-x-3 text-sm font-semibold text-gray-600">
+            {/* Right: Actions, Wallet pill, Tracking button & Cart */}
+            <nav className="flex items-center space-x-1.5 sm:space-x-3 text-xs sm:text-sm font-semibold text-gray-600">
+              
+              {/* Mobile Search Toggle */}
+              <button
+                onClick={() => setIsMobileSearchOpen(!isMobileSearchOpen)}
+                className="sm:hidden p-2 rounded-xl bg-gray-100 text-gray-700"
+                title="Search"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+
+              {/* Admin Mode Badge & Switcher */}
+              {userRole === 'admin' ? (
+                <button
+                  onClick={() => setActivePanel('admin')}
+                  className="hidden md:flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-black text-amber-400 border border-amber-400/30 text-xs font-black shadow-xs"
+                >
+                  <span>👑 Admin Portal</span>
+                </button>
+              ) : null}
+
+              {/* Sahoo Money Wallet Header Button */}
               <button 
                 onClick={() => setActivePanel('money')} 
                 className="hidden lg:flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-orange-50 text-orange-700 border border-orange-200 transition cursor-pointer hover:bg-orange-100"
                 title="Sahoo Money Wallet"
               >
                 <span>👛</span>
-                <span className="text-xs font-black">₹{sahooMoneyBalance}</span>
+                <span className="text-xs font-black">₹{sahooMoneyBalance.toFixed(0)}</span>
               </button>
 
+              {/* Partner Rewards Header Button */}
               <button 
                 onClick={() => setActivePanel('rewards')} 
-                className="hidden lg:flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 transition cursor-pointer hover:bg-amber-100"
+                className="hidden xl:flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 transition cursor-pointer hover:bg-amber-100"
                 title="Partner Rewards (Worth ₹1 each)"
               >
                 <span>🪙</span>
                 <span className="text-xs font-black">{rewardPoints} Pts</span>
               </button>
 
+              {/* Active Order Live Tracking button */}
               {activeOrder && (
                 <button 
                   onClick={() => setActiveTrackingOrder(activeOrder)} 
-                  className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs transition cursor-pointer shadow-md shadow-orange-500/25 animate-pulse"
+                  className="flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs transition cursor-pointer shadow-md shadow-orange-500/25 animate-pulse"
                   title="Track Active Order Live"
                 >
                   <span>🛵</span>
-                  <span className="hidden md:inline">Track Order</span>
+                  <span className="hidden sm:inline">Track</span>
                   <span className="text-[10px] bg-white/20 px-1 rounded">#{activeOrder.id}</span>
                 </button>
               )}
 
-              <button onClick={() => { setActivePanel('dashboard'); setCurrentFilter('favorites'); }} className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-rose-50 text-rose-600 transition cursor-pointer">
+              {/* Favorites shortcut */}
+              <button onClick={() => { setActivePanel('dashboard'); setCurrentFilter('favorites'); }} className="hidden sm:flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-rose-50 text-rose-600 transition cursor-pointer">
                 <Heart className="w-4 h-4 fill-rose-500 text-rose-500" />
-                <span className="text-xs font-bold hidden md:inline">Favorites ({favorites.length})</span>
+                <span className="text-xs font-bold hidden md:inline">({(favorites || []).length})</span>
               </button>
 
-              <button onClick={() => setIsCartOpen(true)} className="relative flex items-center space-x-2 px-3.5 py-2 rounded-xl transition cursor-pointer shadow-sm hover:opacity-90" style={{ backgroundColor: '#c2b767', color: '#fff' }}>
+              {/* Cart Button */}
+              <button onClick={() => setIsCartOpen(true)} className="relative flex items-center space-x-1.5 sm:space-x-2 px-3 sm:px-3.5 py-2 rounded-xl transition cursor-pointer shadow-sm hover:opacity-90" style={{ backgroundColor: '#c2b767', color: '#fff' }}>
                 <ShoppingBag className="w-4 h-4" />
-                <span className="text-xs font-black">Cart</span>
+                <span className="text-xs font-black hidden xs:inline">Cart</span>
                 {totalCartCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow">
                     {totalCartCount}
@@ -596,69 +726,275 @@ export default function Dashboard() {
             </nav>
           </header>
 
-          <main className="flex-1 px-4 sm:px-8 py-6 overflow-y-auto">
+          {/* MOBILE SEARCH BAR (CONDITIONAL) */}
+          {isMobileSearchOpen && (
+            <div className="sm:hidden px-4 py-2.5 bg-amber-50 border-b border-amber-200">
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Search Sweets, Samosa, Bara..." 
+                  value={searchTerm} 
+                  onChange={e => { setSearchTerm(e.target.value); setActivePanel('dashboard'); }} 
+                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-white text-xs font-medium border border-amber-300 focus:outline-none"
+                  autoFocus 
+                />
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              </div>
+            </div>
+          )}
 
+          {/* MAIN PANELS */}
+          <main className="flex-1 px-3 sm:px-8 py-5 sm:py-6 overflow-y-auto">
+
+            {/* ========================================================
+                1. ADMIN MANAGEMENT & INVENTORY PANEL
+            ======================================================== */}
+            {activePanel === 'admin' && (
+              <div className="max-w-5xl mx-auto space-y-6 pb-12">
+                <div className="bg-gradient-to-r from-gray-950 via-gray-900 to-black rounded-3xl p-6 sm:p-8 text-white border border-amber-400/40 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2.5 py-0.5 bg-amber-500 text-black text-[10px] font-black uppercase rounded-md">
+                        Store Operations
+                      </span>
+                      <span className="text-xs text-gray-400">At/Po - Nagapur, Puri</span>
+                    </div>
+                    <h2 className="text-2xl sm:text-3xl font-black text-amber-400">Admin Control Center</h2>
+                    <p className="text-xs text-gray-300">Live order status updater, delivery dispatch & kitchen stock controller</p>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setActivePanel('dashboard')}
+                      className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-black text-xs rounded-xl border border-white/20 transition cursor-pointer flex items-center space-x-1.5"
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>View Customer Storefront</span>
+                    </button>
+                    {onSwitchRole && (
+                      <button
+                        onClick={() => onSwitchRole('customer')}
+                        className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-black font-black text-xs rounded-xl shadow-md transition cursor-pointer"
+                      >
+                        Switch Role to Customer
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Metrics Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="p-4 sm:p-5 bg-white rounded-2xl border border-gray-200 shadow-xs">
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Total Store Revenue</p>
+                    <h3 className="text-xl sm:text-2xl font-black text-emerald-700 mt-1">₹{totalRevenue.toLocaleString()}</h3>
+                    <p className="text-[10px] text-gray-500 mt-0.5">From all non-cancelled orders</p>
+                  </div>
+                  <div className="p-4 sm:p-5 bg-white rounded-2xl border border-gray-200 shadow-xs">
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Active Live Deliveries</p>
+                    <h3 className="text-xl sm:text-2xl font-black text-orange-600 mt-1">{activeOrdersCount}</h3>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Currently on kitchen / road</p>
+                  </div>
+                  <div className="p-4 sm:p-5 bg-white rounded-2xl border border-gray-200 shadow-xs">
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Completed Orders</p>
+                    <h3 className="text-xl sm:text-2xl font-black text-gray-900 mt-1">{deliveredOrdersCount}</h3>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Delivered to customers</p>
+                  </div>
+                  <div className="p-4 sm:p-5 bg-white rounded-2xl border border-gray-200 shadow-xs">
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Out of Stock Items</p>
+                    <h3 className="text-xl sm:text-2xl font-black text-rose-600 mt-1">{(outOfStockItems || []).length}</h3>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Temporarily unavailable</p>
+                  </div>
+                </div>
+
+                {/* Orders Management Table */}
+                <div className="bg-white rounded-3xl p-5 sm:p-7 border border-gray-200 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b pb-3">
+                    <div>
+                      <h3 className="text-base font-black text-gray-900 uppercase tracking-tight">Live Orders Manager</h3>
+                      <p className="text-xs text-gray-500">Update delivery stages live or cancel customer orders</p>
+                    </div>
+                    <span className="text-xs font-black bg-orange-100 text-orange-800 px-2.5 py-1 rounded-lg">
+                      {(pastOrders || []).length} Orders in Database
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {(pastOrders || []).map((ord: any) => {
+                      const curStep = typeof ord.statusIndex === 'number' ? ord.statusIndex : 0;
+                      const isDelivered = curStep === 4;
+                      const isCancelled = curStep === -1;
+
+                      return (
+                        <div key={ord.id} className="p-4 rounded-2xl border bg-gray-50/70 border-gray-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs font-black text-gray-900">#{ord.id}</span>
+                              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                isDelivered ? 'bg-emerald-100 text-emerald-800' :
+                                isCancelled ? 'bg-rose-100 text-rose-800' :
+                                'bg-orange-100 text-orange-800'
+                              }`}>
+                                {isCancelled ? 'Cancelled' : isDelivered ? 'Delivered' : `Stage ${curStep + 1}: ${ord.steps?.[curStep] || 'Processing'}`}
+                              </span>
+                              <span className="text-[10px] text-gray-400">{ord.date}</span>
+                            </div>
+                            <p className="text-xs font-extrabold text-gray-800">{ord.items}</p>
+                            <p className="text-[11px] text-gray-500">📍 {ord.address} • 💳 {ord.payment}</p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 self-end md:self-center">
+                            <span className="text-sm font-black text-gray-900 mr-2">₹{ord.total}</span>
+
+                            {/* Stage Selector */}
+                            <select
+                              value={curStep}
+                              onChange={e => handleUpdateOrderStatus(ord.id, parseInt(e.target.value))}
+                              className="px-2.5 py-1.5 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-800 focus:outline-none"
+                            >
+                              <option value={0}>0: Order Confirmed</option>
+                              <option value={1}>1: Placed</option>
+                              <option value={2}>2: Preparing / Shipped</option>
+                              <option value={3}>3: Out for Delivery</option>
+                              <option value={4}>4: Delivered</option>
+                              <option value={-1}>-1: Cancelled</option>
+                            </select>
+
+                            {/* Quick advance */}
+                            {!isDelivered && !isCancelled && (
+                              <button
+                                onClick={() => handleUpdateOrderStatus(ord.id, Math.min(4, curStep + 1))}
+                                className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs rounded-xl shadow-xs transition cursor-pointer"
+                              >
+                                Advance ➔
+                              </button>
+                            )}
+
+                            {/* Cancel Button */}
+                            {!isCancelled && (
+                              <button
+                                onClick={() => cancelOrder(ord.id)}
+                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Kitchen Inventory In-Stock / Out-of-Stock Controller */}
+                <div className="bg-white rounded-3xl p-5 sm:p-7 border border-gray-200 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b pb-3">
+                    <div>
+                      <h3 className="text-base font-black text-gray-900 uppercase tracking-tight">Kitchen Item Stock Controller</h3>
+                      <p className="text-xs text-gray-500">Toggle sweet and snack availability in real-time</p>
+                    </div>
+                    <span className="text-xs font-black text-gray-600">
+                      {allProducts.length} Items Total
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {allProducts.map(item => {
+                      const isOut = (outOfStockItems || []).includes(item.id);
+                      return (
+                        <div key={item.id} className={`p-3 rounded-2xl border flex items-center justify-between transition ${isOut ? 'bg-rose-50/40 border-rose-200' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className="flex items-center space-x-2.5 overflow-hidden">
+                            <img src={item.img} alt={item.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                            <div className="overflow-hidden">
+                              <h4 className="text-xs font-black text-gray-900 truncate">{item.name}</h4>
+                              <p className="text-[10px] text-gray-500">{item.category === 'sweets' ? 'Sweets (ମିଠା)' : 'Snacks'}</p>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => toggleItemStock(item.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer shrink-0 ${
+                              isOut 
+                                ? 'bg-rose-600 text-white shadow-xs' 
+                                : 'bg-emerald-600 text-white shadow-xs'
+                            }`}
+                          >
+                            {isOut ? '🔴 Out of Stock' : '🟢 In Stock'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ========================================================
+                2. DASHBOARD STOREFRONT (MENU & CATEGORIES)
+            ======================================================== */}
             {activePanel === 'dashboard' && (
-              <div className="space-y-10 pb-16">
+              <div className="space-y-8 sm:space-y-10 pb-12">
                 
+                {/* Hero Banner for Desktop & Tablet */}
                 {currentFilter !== 'favorites' && (
-                  <section className="rounded-3xl p-6 sm:p-10 border shadow-sm flex flex-col lg:flex-row items-center justify-between gap-8" style={{ backgroundColor: '#f2c98330', borderColor: '#BBAB47' }}>
-                    <div className="space-y-4 max-w-xl text-center lg:text-left">
-                      <span className="px-3 py-1 text-xs font-black rounded-xl uppercase tracking-wider border" style={{ backgroundColor: '#f2c983', color: '#c2b767', borderColor: '#BBAB47' }}>Puri’s Finest Sweet & Snack Hub</span>
-                      <h2 className="text-3xl sm:text-5xl font-black text-gray-900 tracking-tight leading-none" style={{ fontFamily: 'Georgia, serif' }}>
+                  <section className="rounded-3xl p-5 sm:p-10 border shadow-xs flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8" style={{ backgroundColor: '#f2c98330', borderColor: '#BBAB47' }}>
+                    <div className="space-y-3 sm:space-y-4 max-w-xl text-center lg:text-left">
+                      <span className="px-3 py-1 text-[11px] sm:text-xs font-black rounded-xl uppercase tracking-wider border inline-block" style={{ backgroundColor: '#f2c983', color: '#c2b767', borderColor: '#BBAB47' }}>
+                        Puri’s Finest Sweet & Snack Hub
+                      </span>
+                      <h2 className="text-2xl sm:text-5xl font-black text-gray-900 tracking-tight leading-none" style={{ fontFamily: 'Georgia, serif' }}>
                         Taste the <br /><span style={{ color: '#c2b767' }}>Tradition...</span>
                       </h2>
                       <p className="text-xs sm:text-sm text-gray-600 font-medium leading-relaxed">
-                        Freshly made Rosogolla, Chhena Podo, Bara & Traditional Snacks delivered fresh to your doorstep in Puri.
+                        Freshly made Rosogolla, Chhena Podo, Bara & Traditional Odia Delicacies delivered hot to your doorstep in Puri.
                       </p>
-                      <div className="flex items-center justify-center lg:justify-start space-x-3">
-                        <button onClick={() => { const el = document.getElementById('menuItemsSection'); el?.scrollIntoView({ behavior: 'smooth' }); }} className="px-6 py-3 text-white font-black text-xs rounded-2xl shadow-lg transition active:scale-95 cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
-                          Order Now
+                      <div className="flex items-center justify-center lg:justify-start space-x-3 pt-1">
+                        <button onClick={() => { const el = document.getElementById('menuItemsSection'); el?.scrollIntoView({ behavior: 'smooth' }); }} className="px-5 sm:px-6 py-2.5 sm:py-3 text-white font-black text-xs rounded-2xl shadow-lg transition active:scale-95 cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
+                          Order Sweets Now
                         </button>
-                        <button onClick={() => setActivePanel('orders')} className="px-5 py-3 font-black text-xs rounded-2xl border transition cursor-pointer" style={{ borderColor: '#c2b767', color: '#c2b767' }}>
-                          Track Past Orders
+                        <button onClick={() => setActivePanel('orders')} className="px-4 sm:px-5 py-2.5 sm:py-3 font-black text-xs rounded-2xl border transition cursor-pointer" style={{ borderColor: '#c2b767', color: '#c2b767' }}>
+                          Track Orders
                         </button>
                       </div>
                     </div>
 
-                    <div className="w-full lg:w-1/2 rounded-3xl overflow-hidden shadow-2xl border-4 border-white">
-                      <img src="https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&auto=format&fit=crop&q=80" alt="Odisha Sweets & Thali" className="w-full h-64 sm:h-72 object-cover hover:scale-105 transition duration-500" />
+                    <div className="w-full lg:w-1/2 rounded-3xl overflow-hidden shadow-xl border-4 border-white">
+                      <img src="https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&auto=format&fit=crop&q=80" alt="Odisha Sweets & Thali" className="w-full h-48 sm:h-64 object-cover hover:scale-105 transition duration-500" />
                     </div>
                   </section>
                 )}
 
+                {/* Categories Cards */}
                 {currentFilter !== 'favorites' && (
                   <section>
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-3 sm:mb-4">
                       <div>
-                        <h2 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">Our Special Categories</h2>
+                        <h2 className="text-lg sm:text-2xl font-black text-gray-900 tracking-tight">Our Special Categories</h2>
                         <p className="text-xs font-medium" style={{ color: '#BBAB47' }}>Select category to explore pure traditional items</p>
                       </div>
-                      <button onClick={() => setCurrentFilter('all')} className="text-xs font-extrabold px-3 py-1.5 rounded-xl border transition cursor-pointer" style={{ color: '#c2b767', backgroundColor: '#f2c98330', borderColor: '#BBAB47' }}>View All Items</button>
+                      <button onClick={() => setCurrentFilter('all')} className="text-xs font-extrabold px-3 py-1.5 rounded-xl border transition cursor-pointer" style={{ color: '#c2b767', backgroundColor: '#f2c98330', borderColor: '#BBAB47' }}>View All</button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                      <div onClick={() => { setCurrentFilter('sweets'); document.getElementById('menuItemsSection')?.scrollIntoView({ behavior: 'smooth' }); }} className="p-5 sm:p-6 rounded-3xl bg-white border-2 hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-between group" style={{ borderColor: '#f2c983' }}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
+                      <div onClick={() => { setCurrentFilter('sweets'); document.getElementById('menuItemsSection')?.scrollIntoView({ behavior: 'smooth' }); }} className="p-4 sm:p-6 rounded-3xl bg-white border-2 hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-between group" style={{ borderColor: '#f2c983' }}>
                         <div className="space-y-1">
                           <span className="px-2.5 py-0.5 text-[10px] font-black rounded-lg uppercase tracking-wide" style={{ backgroundColor: '#f2c983', color: '#c2b767' }}>Pure Desi Ghee</span>
-                          <h3 className="text-xl sm:text-2xl font-black text-gray-900 group-hover:text-amber-600 transition">Sweets (ମିଠା)</h3>
-                          <p className="text-xs text-gray-500 font-medium">Rosgola, Cheese Cake, Jilapi, Malpua, Ladu & more</p>
+                          <h3 className="text-lg sm:text-2xl font-black text-gray-900 group-hover:text-amber-600 transition">Sweets (ମିଠା)</h3>
+                          <p className="text-xs text-gray-500 font-medium">Rosgola, Chhena Podo, Jilapi, Malpua, Ladu & more</p>
                           <span className="inline-flex items-center text-xs font-bold pt-2 group-hover:translate-x-1 transition-transform" style={{ color: '#c2b767' }}>Show Sweets <ArrowRight className="w-3.5 h-3.5 ml-1" /></span>
                         </div>
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shadow-md shrink-0 border" style={{ borderColor: '#BBAB47' }}>
+                        <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shadow-md shrink-0 border" style={{ borderColor: '#BBAB47' }}>
                           <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQtwZakNUCDCTGm30bOrOk45IbALQwlXluQBXtq3uCQ-w&s=10" alt="Sweets" className="w-full h-full object-cover" />
                         </div>
                       </div>
 
-                      <div onClick={() => { setCurrentFilter('breakfast'); document.getElementById('menuItemsSection')?.scrollIntoView({ behavior: 'smooth' }); }} className="p-5 sm:p-6 rounded-3xl bg-white border-2 hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-between group" style={{ borderColor: '#f2c983' }}>
+                      <div onClick={() => { setCurrentFilter('breakfast'); document.getElementById('menuItemsSection')?.scrollIntoView({ behavior: 'smooth' }); }} className="p-4 sm:p-6 rounded-3xl bg-white border-2 hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-between group" style={{ borderColor: '#f2c983' }}>
                         <div className="space-y-1">
                           <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-lg uppercase tracking-wide">Morning & Evening</span>
-                          <h3 className="text-xl sm:text-2xl font-black text-gray-900 group-hover:text-amber-600 transition">Breakfast / Evening Hub</h3>
-                          <p className="text-xs font-bold" style={{ color: '#c2b767' }}>(Snacks Item)</p>
-                          <p className="text-xs text-gray-500 font-medium">Dalma, Bara, Gulugula, Dahi Bara, Puri, Ghuguni & more</p>
-                          <span className="inline-flex items-center text-xs font-bold pt-2 group-hover:translate-x-1 transition-transform" style={{ color: '#c2b767' }}>Show Breakfast <ArrowRight className="w-3.5 h-3.5 ml-1" /></span>
+                          <h3 className="text-lg sm:text-2xl font-black text-gray-900 group-hover:text-amber-600 transition">Breakfast & Snacks</h3>
+                          <p className="text-xs text-gray-500 font-medium">Dalma, Bara, Dahi Bara, Puri Aloo Kasa, Ghuguni & more</p>
+                          <span className="inline-flex items-center text-xs font-bold pt-2 group-hover:translate-x-1 transition-transform" style={{ color: '#c2b767' }}>Show Snacks <ArrowRight className="w-3.5 h-3.5 ml-1" /></span>
                         </div>
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shadow-md shrink-0 border" style={{ borderColor: '#BBAB47' }}>
+                        <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shadow-md shrink-0 border" style={{ borderColor: '#BBAB47' }}>
                           <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQUKmTSG3K7RgZQuGVNi3fjnhC8GiA84PsYpyNFKNKHfyEWN_t8QbTDTeqK&s=10" alt="Breakfast" className="w-full h-full object-cover" />
                         </div>
                       </div>
@@ -666,44 +1002,55 @@ export default function Dashboard() {
                   </section>
                 )}
 
+                {/* Menu Items Grid: Single-col Mobile, 2-col Tablet, 3-col Desktop */}
                 <section id="menuItemsSection">
-                  <div className="flex items-center justify-between mb-6 border-b pb-3" style={{ borderColor: '#BBAB47' }}>
-                    <h2 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
+                  <div className="flex items-center justify-between mb-4 sm:mb-6 border-b pb-3" style={{ borderColor: '#BBAB47' }}>
+                    <h2 className="text-lg sm:text-2xl font-black text-gray-900 tracking-tight">
                       {currentFilter === 'favorites' ? 'My Favorite Items ❤️' : currentFilter === 'sweets' ? 'Sweets Menu (ମିଠା)' : currentFilter === 'breakfast' ? 'Breakfast & Snacks Hub' : searchTerm ? `Search Results for "${searchTerm}"` : 'All Special Menu Items'}
                     </h2>
                     <button onClick={() => { setCurrentFilter('all'); setSearchTerm(''); }} className="text-xs font-bold px-3 py-1 rounded-xl border cursor-pointer" style={{ color: '#c2b767', backgroundColor: '#f2c98330', borderColor: '#BBAB47' }}>
-                      View All Items ({allProducts.length})
+                      All Items ({(allProducts || []).length})
                     </button>
                   </div>
 
-                  {filteredProducts.length === 0 ? (
-                    <div className="py-16 text-center bg-white rounded-3xl border border-orange-100 shadow-sm">
+                  {(!filteredProducts || filteredProducts.length === 0) ? (
+                    <div className="py-16 text-center bg-white rounded-3xl border border-orange-100 shadow-xs">
                       <h4 className="text-base font-black text-gray-800">No items found!</h4>
-                      <p className="text-xs text-gray-500 mt-1">Try checking your spelling or clearing filters</p>
+                      <p className="text-xs text-gray-500 mt-1">Try clearing filters or search term</p>
                       <button onClick={() => { setCurrentFilter('all'); setSearchTerm(''); }} className="mt-4 px-5 py-2.5 text-white rounded-xl text-xs font-black cursor-pointer shadow" style={{ backgroundColor: '#c2b767' }}>Show Full Menu</button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {filteredProducts.map(item => {
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                      {(filteredProducts || []).map(item => {
                         const vIndex = selectedVariants[item.id] || 0;
-                        const variant = item.variants && item.variants[vIndex] ? item.variants[vIndex] : { label: 'Standard', price: 10 };
+                        const variant = item?.variants && item.variants[vIndex] ? item.variants[vIndex] : { label: 'Standard', price: 10 };
                         const key = `${item.name} (${variant.label})`;
-                        const inCart = cartData.find(c => c.name === key);
+                        const inCart = (cartData || []).find(c => c.name === key);
                         const qty = inCart ? inCart.qty : 0;
-                        const isFav = favorites.includes(item.id);
+                        const isFav = (favorites || []).includes(item.id);
+                        const isOut = (outOfStockItems || []).includes(item.id);
 
                         return (
-                          <div key={item.id} className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border flex flex-col justify-between group relative" style={{ borderColor: '#f2c983' }}>
+                          <div key={item.id} className={`bg-white rounded-3xl overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 border flex flex-col justify-between group relative ${isOut ? 'opacity-80' : ''}`} style={{ borderColor: '#f2c983' }}>
+                            
+                            {/* Badges */}
                             <div className="absolute top-3 left-3 z-10 flex items-center space-x-1.5">
-                              <div className="w-4 h-4 border-2 border-emerald-600 p-0.5 rounded-sm bg-white/95 shadow-sm flex items-center justify-center"><div className="w-2 h-2 rounded-full bg-emerald-600"></div></div>
+                              <SwiggyVegBadge size="sm" />
                               <span className="text-white font-black text-[9px] px-2 py-0.5 rounded-full shadow" style={{ backgroundColor: '#c2b767' }}>{item.badge}</span>
+                              {isOut && (
+                                <span className="bg-rose-600 text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase shadow">
+                                  Sold Out
+                                </span>
+                              )}
                             </div>
 
+                            {/* Favorite Button */}
                             <button onClick={(e) => toggleFavorite(e, item.id)} className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/90 hover:bg-white flex items-center justify-center shadow-md transition cursor-pointer">
                               <Heart className={`w-4 h-4 ${isFav ? 'text-rose-500 fill-rose-500' : 'text-gray-400'}`} />
                             </button>
 
-                            <div onClick={() => setModalProduct(item)} className="relative h-48 overflow-hidden cursor-pointer">
+                            {/* Image & Price */}
+                            <div onClick={() => setModalProduct(item)} className="relative h-44 sm:h-48 overflow-hidden cursor-pointer">
                               <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                               <span className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm text-gray-900 font-extrabold text-[11px] px-2.5 py-0.5 rounded-xl shadow flex items-center space-x-1">
                                 <span className="text-amber-500">★</span><span>{item.rating}</span><span className="text-[9px] text-gray-500">({item.reviews})</span>
@@ -717,30 +1064,36 @@ export default function Dashboard() {
                               </div>
                             </div>
 
-                            <div className="p-5 flex-1 flex flex-col justify-between">
+                            {/* Card Content & Variant Selectors */}
+                            <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between">
                               <div>
                                 <div onClick={() => setModalProduct(item)} className="cursor-pointer">
-                                  <h3 className="font-extrabold text-gray-900 text-base transition truncate" style={{ color: '#232936' }}>{item.name}</h3>
+                                  <h3 className="font-extrabold text-gray-900 text-sm sm:text-base transition truncate" style={{ color: '#232936' }}>{item.name}</h3>
                                   <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{item.desc}</p>
                                 </div>
                                 <div className="mt-3">
                                   <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Select Portion / Weight:</label>
-                                  <select value={vIndex} onChange={e => handleVariantChange(item.id, parseInt(e.target.value))} className="w-full px-2.5 py-1.5 border rounded-xl text-xs font-bold text-gray-800 focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}>
-                                    {item.variants && item.variants.map((v: any, idx: number) => <option key={idx} value={idx}>{v.label} - ₹{v.price}</option>)}
+                                  <select value={vIndex} onChange={e => handleVariantChange(item.id, parseInt(e.target.value))} className="w-full px-2.5 py-2 border rounded-xl text-xs font-bold text-gray-800 focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}>
+                                    {(item?.variants || []).map((v: any, idx: number) => <option key={idx} value={idx}>{v.label} - ₹{v.price}</option>)}
                                   </select>
                                 </div>
                               </div>
 
+                              {/* Action: Add to Cart */}
                               <div className="mt-4">
-                                {qty === 0 ? (
-                                  <button onClick={() => addToCartFromItem(item)} className="w-full py-2.5 font-extrabold text-xs rounded-xl border transition-all cursor-pointer flex items-center justify-center space-x-1" style={{ backgroundColor: '#f2c98330', borderColor: '#BBAB47', color: '#c2b767' }}>
+                                {isOut ? (
+                                  <button disabled className="w-full py-2.5 bg-gray-200 text-gray-400 font-extrabold text-xs rounded-xl cursor-not-allowed text-center">
+                                    CURRENTLY SOLD OUT
+                                  </button>
+                                ) : qty === 0 ? (
+                                  <button onClick={() => addToCartFromItem(item)} className="w-full py-2.5 font-extrabold text-xs rounded-xl border transition-all cursor-pointer flex items-center justify-center space-x-1 active:scale-95 shadow-xs" style={{ backgroundColor: '#f2c98330', borderColor: '#BBAB47', color: '#c2b767' }}>
                                     <span>ADD TO CART</span><Plus className="w-3.5 h-3.5" />
                                   </button>
                                 ) : (
-                                  <div className="w-full py-1.5 text-white font-black text-xs rounded-xl flex items-center justify-between px-3 shadow-md" style={{ backgroundColor: '#c2b767' }}>
-                                    <button onClick={() => updateCartQtyByKey(key, -1)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/20 hover:bg-white/30 cursor-pointer">-</button>
-                                    <span>{qty}</span>
-                                    <button onClick={() => updateCartQtyByKey(key, 1)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/20 hover:bg-white/30 cursor-pointer">+</button>
+                                  <div className="w-full py-1 text-white font-black text-xs rounded-xl flex items-center justify-between px-3 shadow-md" style={{ backgroundColor: '#c2b767' }}>
+                                    <button onClick={() => updateCartQtyByKey(key, -1)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/20 hover:bg-white/30 cursor-pointer font-bold text-base">-</button>
+                                    <span className="text-sm">{qty}</span>
+                                    <button onClick={() => updateCartQtyByKey(key, 1)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/20 hover:bg-white/30 cursor-pointer font-bold text-base">+</button>
                                   </div>
                                 )}
                               </div>
@@ -754,178 +1107,203 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* PAYMENT MODES PANEL (SWIGGY STYLE) */}
-            {activePanel === 'payments' && (
-              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border max-w-2xl mx-auto space-y-6 my-6" style={{ borderColor: '#BBAB47' }}>
+            {/* ========================================================
+                3. LIVE ORDERS TRACKER & HISTORY PANEL
+            ======================================================== */}
+            {activePanel === 'orders' && (
+              <div className="bg-white rounded-3xl p-4 sm:p-8 shadow-xs border max-w-2xl mx-auto space-y-6 my-4 sm:my-6" style={{ borderColor: '#BBAB47' }}>
                 <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
                   <div>
                     <div className="flex items-center space-x-2">
                       <span className="text-[10px] font-black uppercase text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                        Swiggy Pay Ecosystem
+                        Swiggy Live Delivery
                       </span>
                     </div>
-                    <h2 className="text-xl font-black text-gray-900 mt-1">Payment Modes & Saved Cards</h2>
-                    <p className="text-xs text-gray-500">Manage your preferred 1-click checkout options with bank-grade 256-bit encryption</p>
+                    <h2 className="text-xl sm:text-2xl font-black text-gray-900 mt-1">Live Order Tracking & History</h2>
+                    <p className="text-xs text-gray-500">Track delivery valet in real-time, view receipts & reorder in 1-click</p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  {/* Swiggy Money / Sahoo Wallet */}
-                  <div className="p-4 rounded-2xl border-2 bg-gradient-to-r from-orange-50 to-amber-50/50 flex items-center justify-between border-orange-300">
-                    <div className="flex items-center space-x-3.5">
-                      <div className="w-11 h-11 rounded-2xl bg-orange-500 text-white shadow-md flex items-center justify-center font-black text-lg">
-                        👛
-                      </div>
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <h4 className="text-xs font-black text-gray-900 uppercase">Sahoo Sweet Money (Wallet)</h4>
-                          <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">1-Click Pay Active</span>
-                        </div>
-                        <p className="text-sm font-black text-orange-600 mt-0.5">Available Balance: ₹250.00</p>
+                {/* ACTIVE LIVE ORDER HERO CARD */}
+                {activeOrder && (
+                  <div className="p-4 sm:p-5 rounded-3xl border-2 border-orange-400 bg-gradient-to-br from-orange-50/80 via-white to-amber-50/60 shadow-md space-y-4 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 bg-orange-500 text-white font-black text-[9px] px-3 py-1 rounded-bl-xl uppercase tracking-wider flex items-center space-x-1">
+                      <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                      <span>ACTIVE LIVE ORDER</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-black text-orange-700 bg-orange-100/80 px-2.5 py-0.5 rounded-full">
+                        Order #{activeOrder.id}
+                      </span>
+                      <h3 className="text-base sm:text-lg font-black text-gray-900">
+                        {activeOrder.statusIndex === 3 ? 'Ramesh Kumar is on the way!' : activeOrder.steps?.[activeOrder.statusIndex] || 'Processing Sweets'}
+                      </h3>
+                      <p className="text-xs text-gray-600 font-medium">
+                        ⚡ Estimated Arrival: <strong className="text-orange-600">22 - 25 mins</strong> to {activeOrder.address.split(',')[0]}
+                      </p>
+                    </div>
+
+                    {/* Progress Bar Timeline */}
+                    <div className="bg-white p-3 rounded-2xl border border-orange-200 shadow-xs">
+                      <div className="flex items-center justify-between relative px-2">
+                        <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 h-1 bg-gray-200 z-0"></div>
+                        <div 
+                          className="absolute left-4 top-1/2 -translate-y-1/2 h-1 bg-orange-500 z-0 transition-all duration-500"
+                          style={{ width: `${(activeOrder.statusIndex / 4) * 88}%` }}
+                        ></div>
+
+                        {(activeOrder.steps || ["Order Confirmed", "Placed", "Preparing/Shipped", "Out for Delivery", "Delivered"]).map((st: string, sIdx: number) => {
+                          const isDone = sIdx <= activeOrder.statusIndex;
+                          const isCurrent = sIdx === activeOrder.statusIndex;
+                          return (
+                            <div key={sIdx} className="relative z-10 flex flex-col items-center">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-xs transition-all ${
+                                isDone ? 'bg-orange-500 text-white' : 'bg-gray-200 text-gray-500'
+                              } ${isCurrent ? 'ring-4 ring-orange-200 scale-110' : ''}`}>
+                                {isDone ? '✓' : sIdx + 1}
+                              </div>
+                              <span className={`text-[8px] sm:text-[9px] font-extrabold mt-1 text-center max-w-[55px] truncate ${
+                                isDone ? 'text-gray-900' : 'text-gray-400'
+                              }`}>
+                                {st}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                    <button onClick={() => alert('Add money feature: ₹500 added to your wallet!')} className="px-3.5 py-2 text-white font-black text-xs rounded-xl shadow-xs cursor-pointer bg-orange-500 hover:bg-orange-600 transition">
-                      + Add Money
-                    </button>
-                  </div>
 
-                  {/* Saved UPI IDs */}
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-black uppercase tracking-wider text-gray-500">Saved UPI Accounts</p>
-                    
-                    <div className="p-3.5 rounded-2xl border bg-white flex items-center justify-between border-gray-200 hover:border-orange-300 transition">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black text-xs">GPay</div>
-                        <div>
-                          <div className="flex items-center space-x-1.5">
-                            <h4 className="text-xs font-black text-gray-900">Google Pay UPI</h4>
-                            <span className="text-[8px] font-black uppercase bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">Default</span>
+                    {/* Action button */}
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold text-gray-600">Total: ₹{activeOrder.total}</span>
+                        <span className="text-[10px] text-gray-400">({activeOrder.payment})</span>
+                      </div>
+                      <button
+                        onClick={() => setActiveTrackingOrder(activeOrder)}
+                        className="px-4 py-2.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-black text-xs rounded-xl shadow-md shadow-orange-500/25 transition cursor-pointer flex items-center space-x-1.5"
+                      >
+                        <span>🛵</span>
+                        <span>Open Live GPS Tracking</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* PAST ORDERS CARDS */}
+                <div className="space-y-3.5">
+                  <h3 className="text-sm font-black uppercase tracking-wider text-gray-800">
+                    Order History & Invoices
+                  </h3>
+
+                  {(!pastOrders || pastOrders.length === 0) ? (
+                    <div className="py-12 text-center text-gray-400">
+                      <p className="text-xs font-bold">No past orders found.</p>
+                      <p className="text-[11px] text-gray-400">Your placed orders will show up here.</p>
+                    </div>
+                  ) : (
+                    (pastOrders || []).map((order: any) => {
+                      if (!order) return null;
+                      const stepsList = Array.isArray(order.steps) ? order.steps : ["Order Confirmed", "Placed", "Preparing/Shipped", "Out for Delivery", "Delivered"];
+                      const currentIdx = typeof order.statusIndex === 'number' ? order.statusIndex : 1;
+                      const isDelivered = currentIdx === 4;
+                      const isCancelled = currentIdx === -1;
+
+                      return (
+                        <div key={order.id || Math.random()} className="p-4 rounded-2xl border-2 bg-white hover:border-orange-300 transition-all shadow-xs space-y-3" style={{ borderColor: '#e5e7eb' }}>
+                          <div className="flex items-center justify-between border-b pb-2.5">
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <h4 className="text-xs font-black text-gray-900">SAHOO SWEETS</h4>
+                                <span className="text-[9px] text-gray-400">#{order.id}</span>
+                              </div>
+                              <p className="text-[10px] text-gray-500">{order.date || "Today"}</p>
+                            </div>
+                            <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg ${
+                              isDelivered ? 'bg-emerald-100 text-emerald-800' :
+                              isCancelled ? 'bg-rose-100 text-rose-800' :
+                              'bg-orange-100 text-orange-800'
+                            }`}>
+                              {isCancelled ? 'Cancelled' : isDelivered ? 'Delivered ✓' : (stepsList[currentIdx] || 'Processing')}
+                            </span>
                           </div>
-                          <p className="text-[10px] text-gray-500 font-mono">9078699528@oksbi</p>
-                        </div>
-                      </div>
-                      <span className="text-xs font-bold text-emerald-600">Verified ✓</span>
-                    </div>
 
-                    <div className="p-3.5 rounded-2xl border bg-white flex items-center justify-between border-gray-200 hover:border-orange-300 transition">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-black text-xs">PhonePe</div>
-                        <div>
-                          <h4 className="text-xs font-black text-gray-900">PhonePe UPI</h4>
-                          <p className="text-[10px] text-gray-500 font-mono">9078699528@ybl</p>
-                        </div>
-                      </div>
-                      <span className="text-xs font-bold text-emerald-600">Verified ✓</span>
-                    </div>
-                  </div>
-
-                  {/* Saved Cards */}
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-black uppercase tracking-wider text-gray-500">Saved Debit / Credit Cards</p>
-
-                    <div className="p-3.5 rounded-2xl border bg-white flex items-center justify-between border-gray-200">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-9 h-9 rounded-xl bg-gray-100 shadow-xs flex items-center justify-center"><CreditCard className="w-4 h-4 text-gray-700" /></div>
-                        <div>
-                          <div className="flex items-center space-x-1.5">
-                            <h4 className="text-xs font-black text-gray-900">HDFC Bank Millennia Debit Card</h4>
-                            <span className="text-[8px] font-black bg-blue-100 text-blue-800 px-1 rounded">VISA</span>
+                          <div className="flex items-start space-x-2.5">
+                            <SwiggyVegBadge size="md" />
+                            <div className="flex-1">
+                              <p className="text-xs font-extrabold text-gray-900 leading-snug">{order.items || "Sahoo Sweets Items"}</p>
+                              <p className="text-[11px] text-gray-500 mt-0.5">📍 {order.address || currentHeaderAddressString}</p>
+                            </div>
                           </div>
-                          <p className="text-[10px] text-gray-500 font-mono">•••• •••• •••• 4892 (Exp 08/28)</p>
-                        </div>
-                      </div>
-                      <button onClick={() => alert('Card removed successfully.')} className="text-xs text-rose-600 font-bold hover:underline cursor-pointer">Remove</button>
-                    </div>
 
-                    <div className="p-3.5 rounded-2xl border bg-white flex items-center justify-between border-gray-200">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-9 h-9 rounded-xl bg-gray-100 shadow-xs flex items-center justify-center"><CreditCard className="w-4 h-4 text-gray-700" /></div>
-                        <div>
-                          <div className="flex items-center space-x-1.5">
-                            <h4 className="text-xs font-black text-gray-900">ICICI Bank Coral Card</h4>
-                            <span className="text-[8px] font-black bg-orange-100 text-orange-800 px-1 rounded">RuPay</span>
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-100 text-xs">
+                            <div>
+                              <span className="font-extrabold text-gray-900">₹{order.total || 0}</span>
+                              <span className="text-[10px] text-gray-500 ml-1.5 font-medium">({order.payment || 'COD'})</span>
+                            </div>
+
+                            <div className="flex items-center space-x-1.5 sm:space-x-2">
+                              {!isDelivered && !isCancelled && (
+                                <button
+                                  onClick={() => setActiveTrackingOrder(order)}
+                                  className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white font-black text-[11px] rounded-xl shadow-xs transition cursor-pointer flex items-center space-x-1"
+                                >
+                                  <span>🛵</span>
+                                  <span>Track Live</span>
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => handleReorder(order)}
+                                className="px-3 py-1.5 bg-gray-50 hover:bg-orange-50 text-orange-600 border border-orange-200 font-extrabold text-[11px] rounded-xl transition cursor-pointer flex items-center space-x-1"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                <span>Reorder</span>
+                              </button>
+
+                              <button 
+                                onClick={() => setSelectedOrderDetails(order)} 
+                                className="px-2.5 py-1.5 text-gray-600 hover:bg-gray-100 font-bold text-[11px] rounded-xl border border-gray-200 transition cursor-pointer flex items-center space-x-1"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-gray-500" />
+                                <span>Details</span>
+                              </button>
+
+                              {currentIdx < 2 && !isCancelled && (
+                                <button 
+                                  onClick={() => cancelOrder(order.id)} 
+                                  className="px-2.5 py-1.5 bg-rose-50 text-rose-600 font-bold text-[11px] rounded-xl hover:bg-rose-100 transition cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-[10px] text-gray-500 font-mono">•••• •••• •••• 1024 (Exp 11/27)</p>
                         </div>
-                      </div>
-                      <button onClick={() => alert('Card removed successfully.')} className="text-xs text-rose-600 font-bold hover:underline cursor-pointer">Remove</button>
-                    </div>
-                  </div>
-
-                  {/* Add New Payment Option Card */}
-                  <div className="p-4 rounded-2xl border-2 bg-amber-50/30 space-y-2 border-dashed" style={{ borderColor: '#BBAB47' }}>
-                    <h4 className="text-xs font-black text-gray-900 uppercase">Add New UPI ID / Card</h4>
-                    <p className="text-[11px] text-gray-600">Enjoy 1-click lightning-fast checkout on all your traditional sweets with bank-grade encryption.</p>
-                    <button onClick={() => { const id = prompt('Enter UPI ID (e.g. mobile@okhdfcbank):'); if (id) alert(`UPI ID ${id} linked successfully!`); }} className="px-4 py-2 text-white font-black text-xs rounded-xl shadow cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
-                      + Add New UPI / Card
-                    </button>
-                  </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             )}
 
-            {/* MY REFUNDS PANEL */}
-            {activePanel === 'refunds' && (
-              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border max-w-2xl mx-auto space-y-6 my-6" style={{ borderColor: '#BBAB47' }}>
-                <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
-                  <div>
-                    <h2 className="text-xl font-black text-gray-900">My Refunds & Status</h2>
-                    <p className="text-xs text-gray-500">Track active and completed transaction refunds</p>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="p-4 rounded-2xl border-2 bg-amber-50/20 space-y-2" style={{ borderColor: '#BBAB47' }}>
-                    <div className="flex justify-between items-center">
-                      <h4 className="text-xs font-black text-gray-900">Refund for Order #SS-1050</h4>
-                      <span className="text-[10px] font-black uppercase bg-amber-100 text-amber-800 px-2 py-0.5 rounded">Processing</span>
-                    </div>
-                    <p className="text-xs text-gray-600">Amount: <span className="font-bold text-gray-900">₹180</span></p>
-                    <p className="text-[11px] text-gray-500">Status: Processing to bank source account (1-2 business days remaining).</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ACCOUNT STATEMENTS PANEL */}
-            {activePanel === 'statements' && (
-              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border max-w-3xl mx-auto space-y-6 my-6" style={{ borderColor: '#BBAB47' }}>
-                <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
-                  <div>
-                    <h2 className="text-xl font-black text-gray-900">Account Statements & Invoices</h2>
-                    <p className="text-xs text-gray-500">Download GST-compliant digital tax receipts and passbook history</p>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <div className="p-4 rounded-2xl border bg-gray-50 flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-black text-gray-900">Invoice #INV-2026-084</h4>
-                      <p className="text-[10px] text-gray-500">Date: Nov 13, 2026 | Amount: ₹370 | Paid via COD</p>
-                    </div>
-                    <button onClick={() => alert('Downloading PDF Invoice...')} className="px-3 py-2 text-white font-black text-xs rounded-xl shadow flex items-center space-x-1.5 cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download PDF</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SAHOO MONEY WALLET PANEL */}
+            {/* ========================================================
+                4. SAHOO MONEY WALLET PANEL
+            ======================================================== */}
             {activePanel === 'money' && (
-              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border max-w-2xl mx-auto space-y-6 my-6" style={{ borderColor: '#BBAB47' }}>
+              <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-xs border max-w-2xl mx-auto space-y-6 my-4 sm:my-6" style={{ borderColor: '#BBAB47' }}>
                 <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
                   <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[10px] font-black uppercase text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                        Prepaid Wallet
-                      </span>
-                    </div>
+                    <span className="text-[10px] font-black uppercase text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                      Prepaid Wallet
+                    </span>
                     <h2 className="text-xl font-black text-gray-900 mt-1">Sahoo Money Wallet</h2>
                     <p className="text-xs text-gray-500">Your digital sweet cash for 1-click lightning checkout, instant refunds & cashbacks</p>
                   </div>
                 </div>
 
-                {/* Wallet Balance Hero Card */}
                 <div className="p-6 rounded-3xl bg-gradient-to-br from-orange-500 via-amber-500 to-amber-600 text-white shadow-xl relative overflow-hidden space-y-4">
                   <div className="flex items-start justify-between">
                     <div>
@@ -965,7 +1343,6 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Quick Add Money Chips */}
                 <div className="p-4 rounded-2xl border bg-gray-50/70 space-y-2.5">
                   <p className="text-xs font-black uppercase text-gray-700">Quick Recharge Wallet</p>
                   <div className="grid grid-cols-4 gap-2">
@@ -981,17 +1358,16 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Wallet Passbook / Transactions */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-black uppercase tracking-wider text-gray-800">
                       Sahoo Money Passbook (Transactions)
                     </h3>
-                    <span className="text-[10px] text-gray-400 font-bold">{moneyHistory.length} Activities</span>
+                    <span className="text-[10px] text-gray-400 font-bold">{(moneyHistory || []).length} Activities</span>
                   </div>
 
                   <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {moneyHistory.map((item: any) => (
+                    {(moneyHistory || []).map((item: any) => (
                       <div key={item.id} className="p-3 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-between">
                         <div className="flex items-center space-x-3">
                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs ${item.type === 'credit' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
@@ -1012,22 +1388,21 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* PARTNER REWARDS & POINTS CONVERTER PANEL */}
+            {/* ========================================================
+                5. PARTNER REWARDS & CONVERTER PANEL
+            ======================================================== */}
             {activePanel === 'rewards' && (
-              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border max-w-2xl mx-auto space-y-6 my-6" style={{ borderColor: '#BBAB47' }}>
+              <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-xs border max-w-2xl mx-auto space-y-6 my-4 sm:my-6" style={{ borderColor: '#BBAB47' }}>
                 <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
                   <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[10px] font-black uppercase text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">
-                        Loyalty & Cash Rewards
-                      </span>
-                    </div>
+                    <span className="text-[10px] font-black uppercase text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">
+                      Loyalty & Cash Rewards
+                    </span>
                     <h2 className="text-xl font-black text-gray-900 mt-1">Partner Rewards</h2>
-                    <p className="text-xs text-gray-500">Earn points on every sweet price-wise, and convert points directly into Sahoo Money wallet cash</p>
+                    <p className="text-xs text-gray-500">Earn points on every sweet, and convert directly into Sahoo Money wallet cash (1 Pt = ₹1)</p>
                   </div>
                 </div>
 
-                {/* Rewards Balance Hero Card */}
                 <div className="p-6 rounded-3xl bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 text-white shadow-xl relative overflow-hidden space-y-4">
                   <div className="flex items-start justify-between">
                     <div>
@@ -1050,479 +1425,84 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* CONVERT REWARDS TO SAHOO MONEY (CORE USER REQUIREMENT) */}
-                <div className="p-5 rounded-3xl border-2 border-orange-300 bg-gradient-to-br from-orange-50/80 via-white to-amber-50/80 space-y-4 shadow-sm">
-                  <div className="flex items-center justify-between border-b border-orange-200 pb-3">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center font-black">
-                        ⇄
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-black uppercase text-gray-900 tracking-wider">
-                          Convert Reward Points to Sahoo Money
-                        </h4>
-                        <p className="text-[11px] text-gray-500">Conversion Rate: <strong>1 Point = ₹1 Sahoo Money</strong></p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-black text-orange-600 bg-orange-100 px-2 py-0.5 rounded-lg">Instant</span>
-                  </div>
-
-                  {/* Converter Controls */}
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1">
-                        Enter Points to Convert:
-                      </label>
-                      <div className="flex space-x-2">
-                        <input
-                          type="number"
-                          min={1}
-                          max={rewardPoints}
-                          value={pointsToConvert}
-                          onChange={e => setPointsToConvert(e.target.value)}
-                          placeholder="e.g. 100"
-                          className="flex-1 text-sm font-black px-3.5 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:border-orange-500 bg-white"
-                        />
-                        <button
-                          onClick={() => setPointsToConvert(rewardPoints.toString())}
-                          className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-black rounded-xl transition cursor-pointer"
-                        >
-                          Max All
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Quick Selection Chips */}
-                    <div className="flex flex-wrap gap-2">
-                      {[50, 100, 200, 300].map(pt => (
-                        <button
-                          key={pt}
-                          onClick={() => setPointsToConvert(pt.toString())}
-                          className={`text-xs px-3 py-1.5 rounded-xl border font-black transition cursor-pointer ${
-                            pointsToConvert === pt.toString()
-                              ? 'bg-orange-500 border-orange-500 text-white shadow-xs'
-                              : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          {pt} Pts (₹{pt})
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Live Conversion Arrow Preview */}
-                    <div className="p-3 bg-amber-50/70 rounded-2xl border border-amber-200 flex items-center justify-around text-center">
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-gray-400">Points Deducted</p>
-                        <p className="text-base font-black text-amber-900 mt-0.5">🪙 {Number(pointsToConvert) || 0} Pts</p>
-                      </div>
-                      <div className="text-orange-500 font-black text-lg">➔</div>
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-gray-400">Sahoo Money Credited</p>
-                        <p className="text-base font-black text-emerald-700 mt-0.5">👛 +₹{Number(pointsToConvert) || 0}.00</p>
-                      </div>
-                    </div>
-
-                    {/* Action Button */}
+                {/* Conversion Widget */}
+                <div className="p-5 bg-gradient-to-br from-amber-50 to-orange-50/50 rounded-3xl border-2 border-amber-300 space-y-3.5">
+                  <h4 className="text-xs font-black uppercase text-amber-900">Convert Points to Sahoo Money</h4>
+                  <div className="flex space-x-2">
+                    <input
+                      type="number"
+                      value={pointsToConvert}
+                      onChange={e => setPointsToConvert(e.target.value)}
+                      placeholder="Points to convert"
+                      className="flex-1 px-3 py-2 border rounded-xl text-xs font-black bg-white"
+                    />
                     <button
                       onClick={() => handleConvertRewardsToMoney(Number(pointsToConvert))}
                       disabled={!pointsToConvert || Number(pointsToConvert) <= 0 || Number(pointsToConvert) > rewardPoints}
-                      className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-black text-xs rounded-xl shadow-lg shadow-orange-500/25 transition cursor-pointer disabled:opacity-40"
+                      className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs rounded-xl shadow cursor-pointer disabled:opacity-40"
                     >
-                      Convert {pointsToConvert || 0} Points into ₹{pointsToConvert || 0} Sahoo Money Now ➔
+                      Convert Now ➔
                     </button>
                   </div>
                 </div>
-
-                {/* PRICE-WISE POINTS EARNING RULES TABLE */}
-                <div className="bg-gray-50/70 p-5 rounded-3xl border border-gray-200 space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-base">📋</span>
-                    <h4 className="text-xs font-black uppercase tracking-wider text-gray-900">
-                      Price-Wise Reward Points Catalog
-                    </h4>
-                  </div>
-                  <p className="text-[11px] text-gray-600 leading-snug">
-                    Har ek item par price ke according points milte hain: <strong>₹10 spent = 1 Reward Point</strong>.
-                  </p>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="p-2.5 bg-white rounded-xl border border-gray-200 flex justify-between items-center">
-                      <span className="font-bold text-gray-800">Bara / Singada (₹20)</span>
-                      <span className="text-[11px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md">🪙 2 Pts</span>
-                    </div>
-                    <div className="p-2.5 bg-white rounded-xl border border-gray-200 flex justify-between items-center">
-                      <span className="font-bold text-gray-800">Garam Puri Plate (₹20)</span>
-                      <span className="text-[11px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md">🪙 2 Pts</span>
-                    </div>
-                    <div className="p-2.5 bg-white rounded-xl border border-gray-200 flex justify-between items-center">
-                      <span className="font-bold text-gray-800">Sweet Box (250g) (₹90)</span>
-                      <span className="text-[11px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md">🪙 9 Pts</span>
-                    </div>
-                    <div className="p-2.5 bg-white rounded-xl border border-gray-200 flex justify-between items-center">
-                      <span className="font-bold text-gray-800">Pahala Rosgola 500g (₹175)</span>
-                      <span className="text-[11px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md">🪙 18 Pts</span>
-                    </div>
-                    <div className="p-2.5 bg-white rounded-xl border border-gray-200 flex justify-between items-center">
-                      <span className="font-bold text-gray-800">Rasgulla (1 Kg) (₹350)</span>
-                      <span className="text-[11px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md">🪙 35 Pts</span>
-                    </div>
-                    <div className="p-2.5 bg-white rounded-xl border border-gray-200 flex justify-between items-center">
-                      <span className="font-bold text-gray-800">Chhena Podo (1 Kg) (₹400)</span>
-                      <span className="text-[11px] font-black text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md">🪙 40 Pts</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Partner Rewards Points History */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-gray-800">
-                      Reward Points History
-                    </h3>
-                    <span className="text-[10px] text-gray-400 font-bold">{rewardsHistory.length} Activities</span>
-                  </div>
-
-                  <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                    {rewardsHistory.map((item: any) => (
-                      <div key={item.id} className="p-3 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs ${item.points > 0 ? 'bg-amber-100 text-amber-900' : 'bg-gray-200 text-gray-700'}`}>
-                            {item.points > 0 ? '🪙' : '⇄'}
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-black text-gray-900">{item.title}</h4>
-                            <p className="text-[10px] text-gray-400">{item.date}</p>
-                          </div>
-                        </div>
-                        <span className={`text-xs font-black ${item.points > 0 ? 'text-amber-800' : 'text-gray-600'}`}>
-                          {item.points > 0 ? `+${item.points} Pts` : `${item.points} Pts`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
               </div>
             )}
 
-            {/* PAST ORDERS & SWIGGY LIVE TRACKER PANEL */}
-            {activePanel === 'orders' && (
-              <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-sm border max-w-2xl mx-auto space-y-6 my-6" style={{ borderColor: '#BBAB47' }}>
-                <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[10px] font-black uppercase text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                        Swiggy Live Delivery
-                      </span>
-                    </div>
-                    <h2 className="text-xl sm:text-2xl font-black text-gray-900 mt-1">Live Order Tracking & History</h2>
-                    <p className="text-xs text-gray-500">Track delivery valet in real-time, view receipts, and reorder favourite sweets in 1-click</p>
-                  </div>
-                </div>
-
-                {/* ACTIVE LIVE ORDER HERO CARD (IF ACTIVE ORDER EXISTS) */}
-                {activeOrder && (
-                  <div className="p-5 rounded-3xl border-2 border-orange-400 bg-gradient-to-br from-orange-50/80 via-white to-amber-50/60 shadow-md space-y-4 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 bg-orange-500 text-white font-black text-[9px] px-3 py-1 rounded-bl-xl uppercase tracking-wider flex items-center space-x-1">
-                      <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
-                      <span>ACTIVE LIVE ORDER</span>
-                    </div>
-
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-black text-orange-700 bg-orange-100/80 px-2.5 py-0.5 rounded-full">
-                          Order #{activeOrder.id}
-                        </span>
-                        <h3 className="text-lg font-black text-gray-900">
-                          {activeOrder.statusIndex === 3 ? 'Ramesh Kumar is on the way!' : activeOrder.steps[activeOrder.statusIndex] || 'Processing Sweets'}
-                        </h3>
-                        <p className="text-xs text-gray-600 font-medium">
-                          ⚡ Estimated Arrival: <strong className="text-orange-600">22 - 25 mins</strong> to {activeOrder.address.split(',')[0]}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="bg-white p-3 rounded-2xl border border-orange-200 shadow-xs">
-                      <div className="flex items-center justify-between relative px-2">
-                        <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 h-1 bg-gray-200 z-0"></div>
-                        <div 
-                          className="absolute left-4 top-1/2 -translate-y-1/2 h-1 bg-orange-500 z-0 transition-all duration-500"
-                          style={{ width: `${(activeOrder.statusIndex / 4) * 88}%` }}
-                        ></div>
-
-                        {(activeOrder.steps || ["Order Received", "Packing", "Partner Assigned", "Out for Delivery", "Delivered"]).map((st: string, sIdx: number) => {
-                          const isDone = sIdx <= activeOrder.statusIndex;
-                          const isCurrent = sIdx === activeOrder.statusIndex;
-                          return (
-                            <div key={sIdx} className="relative z-10 flex flex-col items-center">
-                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-xs transition-all ${
-                                isDone ? 'bg-orange-500 text-white' : 'bg-gray-200 text-gray-500'
-                              } ${isCurrent ? 'ring-4 ring-orange-200 scale-110' : ''}`}>
-                                {isDone ? '✓' : sIdx + 1}
-                              </div>
-                              <span className={`text-[8px] sm:text-[9px] font-extrabold mt-1 text-center max-w-[55px] truncate ${
-                                isDone ? 'text-gray-900' : 'text-gray-400'
-                              }`}>
-                                {st}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Action to open live GPS map */}
-                    <div className="flex items-center justify-between pt-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs font-bold text-gray-600">Total: ₹{activeOrder.total}</span>
-                        <span className="text-[10px] text-gray-400">({activeOrder.payment})</span>
-                      </div>
-                      <button
-                        onClick={() => setActiveTrackingOrder(activeOrder)}
-                        className="px-4 py-2.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-black text-xs rounded-xl shadow-md shadow-orange-500/25 transition cursor-pointer flex items-center space-x-1.5"
-                      >
-                        <span>🛵</span>
-                        <span>Open Live GPS Tracking</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* PAST ORDERS LIST (SWIGGY CARDS) */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-black uppercase tracking-wider text-gray-800">
-                    Order History & Past Invoices
-                  </h3>
-
-                  {Array.isArray(pastOrders) && pastOrders.length === 0 ? (
-                    <div className="py-12 text-center text-gray-400">
-                      <p className="text-xs font-bold">No past orders found.</p>
-                      <p className="text-[11px] text-gray-400">Your placed orders will show up here.</p>
-                    </div>
-                  ) : (
-                    Array.isArray(pastOrders) && pastOrders.map((order: any) => {
-                      if (!order) return null;
-                      const stepsList = Array.isArray(order.steps) ? order.steps : ["Order Confirmed", "Placed", "Shipped", "Out for Delivery", "Delivered"];
-                      const currentIdx = typeof order.statusIndex === 'number' ? order.statusIndex : 1;
-                      const isDelivered = currentIdx === 4;
-                      const isCancelled = currentIdx === -1;
-
-                      return (
-                        <div key={order.id || Math.random()} className="p-4 sm:p-5 rounded-2xl border-2 bg-white hover:border-orange-300 transition-all shadow-xs space-y-3.5" style={{ borderColor: '#e5e7eb' }}>
-                          
-                          {/* Card Header */}
-                          <div className="flex items-center justify-between border-b pb-2.5">
-                            <div>
-                              <div className="flex items-center space-x-2">
-                                <h4 className="text-xs font-black text-gray-900">SAHOO SWEETS</h4>
-                                <span className="text-[9px] text-gray-400">#{order.id}</span>
-                              </div>
-                              <p className="text-[10px] text-gray-500">{order.date || "Today"}</p>
-                            </div>
-                            <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg ${
-                              isDelivered ? 'bg-emerald-100 text-emerald-800' :
-                              isCancelled ? 'bg-rose-100 text-rose-800' :
-                              'bg-orange-100 text-orange-800'
-                            }`}>
-                              {isCancelled ? 'Cancelled' : isDelivered ? 'Delivered ✓' : (stepsList[currentIdx] || 'On The Way')}
-                            </span>
-                          </div>
-
-                          {/* Items and veg badge */}
-                          <div className="flex items-start space-x-2.5">
-                            <SwiggyVegBadge size="md" />
-                            <div className="flex-1">
-                              <p className="text-xs font-extrabold text-gray-900 leading-snug">{order.items || "Sahoo Sweets Items"}</p>
-                              <p className="text-[11px] text-gray-500 mt-0.5">📍 {order.address || currentHeaderAddressString}</p>
-                              {order.deliveryInstructions && (
-                                <p className="text-[10px] text-orange-700 bg-orange-50 px-2 py-0.5 rounded-md inline-block mt-1 font-semibold">
-                                  Notes: {order.deliveryInstructions}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Bottom info and Swiggy action buttons */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-100 text-xs">
-                            <div>
-                              <span className="font-extrabold text-gray-900">₹{order.total || 0}</span>
-                              <span className="text-[10px] text-gray-500 ml-1.5 font-medium">({order.payment || 'COD'})</span>
-                            </div>
-
-                            <div className="flex items-center space-x-2">
-                              {/* Track Live button */}
-                              {!isDelivered && !isCancelled && (
-                                <button
-                                  onClick={() => setActiveTrackingOrder(order)}
-                                  className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white font-black text-[11px] rounded-xl shadow-xs transition cursor-pointer flex items-center space-x-1"
-                                >
-                                  <span>🛵</span>
-                                  <span>Track Live</span>
-                                </button>
-                              )}
-
-                              {/* Swiggy Reorder button */}
-                              <button
-                                onClick={() => handleReorder(order)}
-                                className="px-3 py-1.5 bg-gray-50 hover:bg-orange-50 text-orange-600 border border-orange-200 font-extrabold text-[11px] rounded-xl transition cursor-pointer flex items-center space-x-1"
-                                title="Add these items back to cart"
-                              >
-                                <RefreshCw className="w-3 h-3" />
-                                <span>Reorder</span>
-                              </button>
-
-                              {/* Rate Order button */}
-                              <button
-                                onClick={() => setRatingOrder(order)}
-                                className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-extrabold text-[11px] rounded-xl transition cursor-pointer flex items-center space-x-1"
-                              >
-                                <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                                <span>{order.rating ? `${order.rating}★` : 'Rate'}</span>
-                              </button>
-
-                              {/* View Details */}
-                              <button 
-                                onClick={() => setSelectedOrderDetails(order)} 
-                                className="px-2.5 py-1.5 text-gray-600 hover:bg-gray-100 font-bold text-[11px] rounded-xl border border-gray-200 transition cursor-pointer flex items-center space-x-1"
-                              >
-                                <Eye className="w-3.5 h-3.5 text-gray-500" />
-                                <span className="hidden sm:inline">Details</span>
-                              </button>
-
-                              {/* Cancel */}
-                              {currentIdx < 2 && !isCancelled && (
-                                <button 
-                                  onClick={() => cancelOrder(order.id)} 
-                                  className="px-2.5 py-1.5 bg-rose-50 text-rose-600 font-bold text-[11px] rounded-xl hover:bg-rose-100 transition cursor-pointer"
-                                >
-                                  Cancel
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* MY ACCOUNT PANEL */}
-            {activePanel === 'account' && (
-              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border max-w-xl mx-auto space-y-6 my-6" style={{ borderColor: '#BBAB47' }}>
-                <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
-                  <div>
-                    <h2 className="text-xl font-black text-gray-900">My Account Profile</h2>
-                    <p className="text-xs text-gray-500">View and update your personal information and mobile number</p>
-                  </div>
-                </div>
-
-                {!isEditingAccount ? (
-                  <div className="space-y-4">
-                    <div className="p-4 bg-amber-50/50 rounded-2xl border space-y-2" style={{ borderColor: '#BBAB47' }}>
-                      <p className="text-xs font-bold text-gray-500 uppercase">Full Name</p>
-                      <p className="text-sm font-black text-gray-900">{userProfile.name}</p>
-                    </div>
-                    <div className="p-4 bg-amber-50/50 rounded-2xl border space-y-2" style={{ borderColor: '#BBAB47' }}>
-                      <p className="text-xs font-bold text-gray-500 uppercase">Phone Number</p>
-                      <p className="text-sm font-black text-gray-900">+91 {userProfile.phone}</p>
-                    </div>
-                    <div className="p-4 bg-amber-50/50 rounded-2xl border space-y-2" style={{ borderColor: '#BBAB47' }}>
-                      <p className="text-xs font-bold text-gray-500 uppercase">Email ID</p>
-                      <p className="text-sm font-black text-gray-900">{userProfile.email}</p>
-                    </div>
-                    <button onClick={() => setIsEditingAccount(true)} className="w-full py-3 text-white font-black text-xs rounded-xl shadow cursor-pointer flex items-center justify-center space-x-1.5" style={{ backgroundColor: '#c2b767' }}>
-                      <Edit3 className="w-4 h-4" />
-                      <span>Edit Account & Phone Number</span>
-                    </button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleUpdateAccount} className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-black text-gray-700 uppercase mb-1">Full Name</label>
-                      <input type="text" value={editName} onChange={e => setEditName(e.target.value)} required className="w-full px-3.5 py-2.5 border rounded-xl text-xs font-bold bg-white" style={{ borderColor: '#BBAB47' }} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-black text-gray-700 uppercase mb-1">Mobile Number (10 Digits)</label>
-                      <input type="tel" maxLength={10} value={editPhone} onChange={e => setEditPhone(e.target.value)} required className="w-full px-3.5 py-2.5 border rounded-xl text-xs font-bold bg-white" style={{ borderColor: '#BBAB47' }} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-black text-gray-700 uppercase mb-1">Email ID</label>
-                      <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} required className="w-full px-3.5 py-2.5 border rounded-xl text-xs font-bold bg-white" style={{ borderColor: '#BBAB47' }} />
-                    </div>
-                    <div className="flex space-x-2 pt-2">
-                      <button type="submit" className="flex-1 py-3 text-white font-black text-xs rounded-xl shadow cursor-pointer" style={{ backgroundColor: '#c2b767' }}>Save Changes</button>
-                      <button type="button" onClick={() => setIsEditingAccount(false)} className="px-5 py-3 border font-bold text-xs rounded-xl cursor-pointer">Cancel</button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            )}
-
-            {/* ADDRESS MANAGEMENT PANEL */}
+            {/* ========================================================
+                6. SAVED ADDRESSES PANEL
+            ======================================================== */}
             {activePanel === 'address' && (
-              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border max-w-2xl mx-auto space-y-6 my-6" style={{ borderColor: '#BBAB47' }}>
+              <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-xs border max-w-2xl mx-auto space-y-6 my-4 sm:my-6" style={{ borderColor: '#BBAB47' }}>
                 <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
                   <div>
                     <h2 className="text-xl font-black text-gray-900">Manage Delivery Addresses</h2>
                     <p className="text-xs text-gray-500">Add multiple addresses and set your default delivery location</p>
                   </div>
                   <button onClick={() => setShowAddAddressModal(true)} className="px-4 py-2 text-white font-black text-xs rounded-xl shadow cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
-                    + Add New Address
+                    + Add Address
                   </button>
                 </div>
 
                 {showAddAddressModal && (
-                  <form onSubmit={handleAddNewAddressSubmit} className="space-y-3 bg-amber-50/60 p-5 rounded-2xl border border-amber-300">
+                  <form onSubmit={handleAddNewAddressSubmit} className="space-y-3 bg-amber-50/60 p-4 rounded-2xl border border-amber-300">
                     <div className="flex justify-between items-center">
                       <h4 className="text-xs font-black text-gray-900 uppercase">Add New Delivery Address</h4>
                       <button type="button" onClick={() => setShowAddAddressModal(false)} className="text-gray-500 font-bold hover:text-black">✕</button>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <input type="text" placeholder="Full Name" value={newName} onChange={e => setNewName(e.target.value)} required className="px-3 py-2 border rounded-xl text-xs bg-white" style={{ borderColor: '#BBAB47' }} />
-                      <input type="tel" maxLength={10} placeholder="Mobile Number" value={newPhone} onChange={e => setNewPhone(e.target.value)} required className="px-3 py-2 border rounded-xl text-xs bg-white" style={{ borderColor: '#BBAB47' }} />
+                      <input type="text" placeholder="Full Name" value={newName} onChange={e => setNewName(e.target.value)} required className="px-3 py-2 border rounded-xl text-xs bg-white" />
+                      <input type="tel" maxLength={10} placeholder="Mobile Number" value={newPhone} onChange={e => setNewPhone(e.target.value)} required className="px-3 py-2 border rounded-xl text-xs bg-white" />
                     </div>
-                    <input type="text" placeholder="Street Address / House No / Landmark" value={newAddr} onChange={e => setNewAddr(e.target.value)} required className="w-full px-3 py-2 border rounded-xl text-xs bg-white" style={{ borderColor: '#BBAB47' }} />
+                    <input type="text" placeholder="Street Address / House No" value={newAddr} onChange={e => setNewAddr(e.target.value)} required className="w-full px-3 py-2 border rounded-xl text-xs bg-white" />
                     <div className="grid grid-cols-3 gap-2">
-                      <input type="text" placeholder="City" value={newCity} onChange={e => setNewCity(e.target.value)} required className="px-3 py-2 border rounded-xl text-xs bg-white" style={{ borderColor: '#BBAB47' }} />
-                      <input type="text" placeholder="State" value={newState} onChange={e => setNewState(e.target.value)} required className="px-3 py-2 border rounded-xl text-xs bg-white" style={{ borderColor: '#BBAB47' }} />
-                      <input type="text" maxLength={6} placeholder="PIN Code" value={newPin} onChange={e => setNewPin(e.target.value)} required className="px-3 py-2 border rounded-xl text-xs bg-white" style={{ borderColor: '#BBAB47' }} />
+                      <input type="text" placeholder="City" value={newCity} onChange={e => setNewCity(e.target.value)} required className="px-3 py-2 border rounded-xl text-xs bg-white" />
+                      <input type="text" placeholder="State" value={newState} onChange={e => setNewState(e.target.value)} required className="px-3 py-2 border rounded-xl text-xs bg-white" />
+                      <input type="text" maxLength={6} placeholder="PIN Code" value={newPin} onChange={e => setNewPin(e.target.value)} required className="px-3 py-2 border rounded-xl text-xs bg-white" />
                     </div>
                     <button type="submit" className="w-full py-2.5 text-white font-black text-xs rounded-xl shadow cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
-                      Save & Deliver Here
+                      Save Address
                     </button>
                   </form>
                 )}
 
                 <div className="space-y-3">
-                  <h4 className="text-xs font-black uppercase text-gray-500">Saved Addresses ({addressList.length})</h4>
-                  {addressList.map((addr: any) => (
-                    <div key={addr.id} className={`p-4 rounded-2xl border-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition ${addr.isDefault ? 'bg-amber-50/50 border-orange-500 shadow-sm' : 'bg-white border-gray-200'}`}>
-                      <div className="flex items-start space-x-3">
-                        <Home className="w-5 h-5 mt-0.5 shrink-0 text-amber-700" />
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <h4 className="text-xs font-black text-gray-900">{addr.name}</h4>
-                            <span className="text-[10px] font-bold text-gray-500">({addr.phone})</span>
-                            {addr.isDefault && (
-                              <span className="text-[9px] font-black uppercase text-white px-2 py-0.5 rounded shadow-sm" style={{ backgroundColor: '#c2b767' }}>DEFAULT</span>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-600 mt-1">{addr.address}, {addr.city}, {addr.state} - {addr.pin}</p>
+                  {(addressList || []).map((addr: any) => (
+                    <div key={addr.id} className={`p-4 rounded-2xl border-2 flex items-center justify-between gap-3 ${addr.isDefault ? 'bg-amber-50/50 border-orange-500' : 'bg-white border-gray-200'}`}>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h4 className="text-xs font-black text-gray-900">{addr.name}</h4>
+                          <span className="text-[10px] text-gray-500">({addr.phone})</span>
+                          {addr.isDefault && <span className="text-[9px] font-black uppercase text-white px-2 py-0.5 rounded" style={{ backgroundColor: '#c2b767' }}>DEFAULT</span>}
                         </div>
+                        <p className="text-xs text-gray-600 mt-1">{addr.address}, {addr.city} - {addr.pin}</p>
                       </div>
-
-                      <div className="flex items-center space-x-2 self-end sm:self-center">
+                      <div className="flex items-center space-x-2">
                         {!addr.isDefault && (
-                          <button onClick={() => setDefaultAddress(addr.id)} className="px-3 py-1.5 rounded-lg border text-[11px] font-bold text-gray-700 hover:bg-gray-100 cursor-pointer" style={{ borderColor: '#BBAB47' }}>
-                            Set as Default
+                          <button onClick={() => setDefaultAddress(addr.id)} className="px-2.5 py-1 rounded-lg border text-[11px] font-bold text-gray-700 hover:bg-gray-100 cursor-pointer">
+                            Set Default
                           </button>
                         )}
-                        <button onClick={() => deleteAddress(addr.id)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer" title="Delete Address">
+                        <button onClick={() => deleteAddress(addr.id)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -1532,48 +1512,166 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* ABOUT US PANEL */}
-            {activePanel === 'about' && (
-              <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-sm border max-w-3xl mx-auto space-y-8 my-6" style={{ borderColor: '#BBAB47' }}>
-                <div className="flex items-center space-x-3 border-b pb-4" style={{ borderColor: '#BBAB47' }}>
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black shadow" style={{ backgroundColor: '#c2b767' }}>
-                    <BookOpen className="w-6 h-6 text-black" />
-                  </div>
+            {/* ========================================================
+                7. PAYMENT MODES & SAVED CARDS PANEL
+            ======================================================== */}
+            {activePanel === 'payments' && (
+              <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-xs border max-w-2xl mx-auto space-y-6 my-4 sm:my-6" style={{ borderColor: '#BBAB47' }}>
+                <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
                   <div>
-                    <h2 className="text-2xl font-black text-gray-900" style={{ fontFamily: 'Georgia, serif' }}>About Sahoo Sweets & Help</h2>
-                    <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#c2b767' }}>Our Heritage, History & Customer Support</p>
+                    <span className="text-[10px] font-black uppercase text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                      Payment Ecosystem
+                    </span>
+                    <h2 className="text-xl font-black text-gray-900 mt-1">Payment Modes & Saved Cards</h2>
+                    <p className="text-xs text-gray-500">Manage 1-click checkout with bank-grade 256-bit encryption</p>
                   </div>
                 </div>
 
-                <div className="space-y-4 text-xs sm:text-sm text-gray-700 leading-relaxed font-medium">
-                  <p>
-                    Founded decades ago in the sacred land of Puri, **Sahoo Sweets** (At/Po - Nagapur) has been a beloved destination for authentic traditional sweets, pure desi ghee delicacies, and morning breakfast favorites.
-                  </p>
-                  <p>
-                    Our founder, Krushna Chandra Sahoo, envisioned a place where every sweet carries the warmth of traditional Odia culture. From our world-famous *Pahala Style Rosgolas* slow-boiled in aromatic chasni to our authentic *Chhena Podo* (Cheese Cake) baked with caramelized crusts, every item is crafted with uncompromising quality and purity.
-                  </p>
-                </div>
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl border-2 bg-gradient-to-r from-orange-50 to-amber-50/50 flex items-center justify-between border-orange-300">
+                    <div className="flex items-center space-x-3.5">
+                      <div className="w-11 h-11 rounded-2xl bg-orange-500 text-white shadow-md flex items-center justify-center font-black text-lg">
+                        👛
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-gray-900 uppercase">Sahoo Sweet Money (Wallet)</h4>
+                        <p className="text-sm font-black text-orange-600 mt-0.5">Available Balance: ₹{sahooMoneyBalance.toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => handleAddSahooMoney(500)} className="px-3.5 py-2 text-white font-black text-xs rounded-xl shadow-xs cursor-pointer bg-orange-500 hover:bg-orange-600 transition">
+                      + Add ₹500
+                    </button>
+                  </div>
 
-                <div className="border-t pt-6 space-y-3" style={{ borderColor: '#BBAB47' }}>
-                  <h3 className="text-lg font-black text-gray-900 flex items-center">
-                    <HelpCircle className="w-5 h-5 mr-2 text-amber-600" /> Need Help with your Order?
-                  </h3>
-                  <p className="text-xs text-gray-600">Contact Krushna Chandra Sahoo directly through our support channels:</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-bold">
-                    <div className="p-3.5 rounded-xl border bg-amber-50/30 flex items-center space-x-2.5" style={{ borderColor: '#BBAB47' }}>
-                      <PhoneCall className="w-4 h-4 shrink-0 text-black" />
-                      <span className="text-black">+91 9078699528 (Phone/WhatsApp)</span>
+                  <div className="p-3.5 rounded-2xl border bg-white flex items-center justify-between border-gray-200">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black text-xs">GPay</div>
+                      <div>
+                        <h4 className="text-xs font-black text-gray-900">Google Pay (GPay)</h4>
+                        <p className="text-[10px] text-gray-500 font-mono">9078699528@oksbi</p>
+                      </div>
                     </div>
-                    <div className="p-3.5 rounded-xl border bg-amber-50/30 flex items-center space-x-2.5" style={{ borderColor: '#BBAB47' }}>
-                      <FileText className="w-4 h-4 shrink-0 text-black" />
-                      <span className="text-black">krushnachandrasahoo990@gmail.com</span>
+                    <span className="text-xs font-bold text-emerald-600">Verified ✓</span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl border bg-white flex items-center justify-between border-gray-200">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-black text-xs">PhonePe</div>
+                      <div>
+                        <h4 className="text-xs font-black text-gray-900">PhonePe UPI</h4>
+                        <p className="text-[10px] text-gray-500 font-mono">9078699528@ybl</p>
+                      </div>
                     </div>
+                    <span className="text-xs font-bold text-emerald-600">Verified ✓</span>
                   </div>
                 </div>
+              </div>
+            )}
 
-                <button onClick={() => setActivePanel('dashboard')} className="px-6 py-3 text-white font-black text-xs rounded-xl shadow cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
-                  Explore Our Menu
-                </button>
+            {/* ========================================================
+                8. MY ACCOUNT PANEL
+            ======================================================== */}
+            {activePanel === 'account' && (
+              <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-xs border max-w-xl mx-auto space-y-6 my-4 sm:my-6" style={{ borderColor: '#BBAB47' }}>
+                <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
+                  <div>
+                    <h2 className="text-xl font-black text-gray-900">My Account Profile</h2>
+                    <p className="text-xs text-gray-500">View and update your personal details</p>
+                  </div>
+                  <span className="text-xs font-black bg-amber-100 text-amber-900 px-2.5 py-1 rounded-lg uppercase">
+                    {userRole.toUpperCase()}
+                  </span>
+                </div>
+
+                {!isEditingAccount ? (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-amber-50/50 rounded-2xl border space-y-1" style={{ borderColor: '#BBAB47' }}>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase">Full Name</p>
+                      <p className="text-sm font-black text-gray-900">{userProfile?.name}</p>
+                    </div>
+                    <div className="p-4 bg-amber-50/50 rounded-2xl border space-y-1" style={{ borderColor: '#BBAB47' }}>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase">Phone Number</p>
+                      <p className="text-sm font-black text-gray-900">+91 {userProfile?.phone}</p>
+                    </div>
+                    <div className="p-4 bg-amber-50/50 rounded-2xl border space-y-1" style={{ borderColor: '#BBAB47' }}>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase">Email ID</p>
+                      <p className="text-sm font-black text-gray-900">{userProfile?.email}</p>
+                    </div>
+                    <button onClick={() => setIsEditingAccount(true)} className="w-full py-3 text-white font-black text-xs rounded-xl shadow cursor-pointer flex items-center justify-center space-x-1.5" style={{ backgroundColor: '#c2b767' }}>
+                      <Edit3 className="w-4 h-4" />
+                      <span>Edit Account Profile</span>
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleUpdateAccount} className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-black text-gray-700 uppercase mb-1">Full Name</label>
+                      <input type="text" value={editName} onChange={e => setEditName(e.target.value)} required className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-gray-700 uppercase mb-1">Phone Number</label>
+                      <input type="tel" maxLength={10} value={editPhone} onChange={e => setEditPhone(e.target.value)} required className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-gray-700 uppercase mb-1">Email ID</label>
+                      <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} required className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
+                    </div>
+                    <div className="flex space-x-2 pt-2">
+                      <button type="submit" className="flex-1 py-2.5 text-white font-black text-xs rounded-xl shadow cursor-pointer" style={{ backgroundColor: '#c2b767' }}>Save Changes</button>
+                      <button type="button" onClick={() => setIsEditingAccount(false)} className="px-4 py-2.5 border font-bold text-xs rounded-xl cursor-pointer">Cancel</button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {/* ========================================================
+                9. INVOICES & STATEMENTS PANEL
+            ======================================================== */}
+            {activePanel === 'statements' && (
+              <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-xs border max-w-2xl mx-auto space-y-6 my-4 sm:my-6" style={{ borderColor: '#BBAB47' }}>
+                <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
+                  <div>
+                    <h2 className="text-xl font-black text-gray-900">Invoices & Tax Receipts</h2>
+                    <p className="text-xs text-gray-500">Download digital GST tax receipts and order invoices</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {(pastOrders || []).map((ord: any) => (
+                    <div key={ord.id} className="p-4 rounded-2xl border bg-gray-50 flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-black text-gray-900">Tax Invoice #{ord.id}</h4>
+                        <p className="text-[10px] text-gray-500">{ord.date} • Total: ₹{ord.total} • {ord.payment}</p>
+                      </div>
+                      <button onClick={() => alert(`Downloading Invoice #${ord.id} PDF...`)} className="px-3 py-2 text-white font-black text-xs rounded-xl shadow flex items-center space-x-1.5 cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
+                        <Download className="w-3.5 h-3.5" />
+                        <span>PDF</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ========================================================
+                10. MY REFUNDS PANEL
+            ======================================================== */}
+            {activePanel === 'refunds' && (
+              <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-xs border max-w-2xl mx-auto space-y-6 my-4 sm:my-6" style={{ borderColor: '#BBAB47' }}>
+                <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: '#BBAB47' }}>
+                  <div>
+                    <h2 className="text-xl font-black text-gray-900">My Refunds & Status</h2>
+                    <p className="text-xs text-gray-500">Track cancellation and return refunds directly to Sahoo Money / Source</p>
+                  </div>
+                </div>
+                <div className="p-4 rounded-2xl border-2 bg-amber-50/20 space-y-2" style={{ borderColor: '#BBAB47' }}>
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-black text-gray-900">Cancellation Refund #SS-1050</h4>
+                    <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">Refunded</span>
+                  </div>
+                  <p className="text-xs text-gray-600">Amount: <span className="font-bold text-gray-900">₹180.00</span></p>
+                  <p className="text-[11px] text-gray-500">Refund credited back to Sahoo Money Wallet.</p>
+                </div>
               </div>
             )}
 
@@ -1581,27 +1679,93 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* ========================================================
+          MOBILE QUICK BOTTOM NAVIGATION BAR (< 640px)
+          Provides quick thumb-friendly access to Home, Orders, Wallet, Rewards & Cart
+      ======================================================== */}
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl py-2 px-3 flex items-center justify-around">
+        <button
+          onClick={() => { setActivePanel('dashboard'); setCurrentFilter('all'); }}
+          className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${activePanel === 'dashboard' ? 'text-amber-600 font-black' : 'text-gray-500 font-semibold'}`}
+        >
+          <Home className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5">Menu</span>
+        </button>
 
+        <button
+          onClick={() => setActivePanel('orders')}
+          className={`flex flex-col items-center py-1 px-2 rounded-xl relative transition ${activePanel === 'orders' ? 'text-amber-600 font-black' : 'text-gray-500 font-semibold'}`}
+        >
+          <Truck className="w-5 h-5" />
+          <span className="text-[10px] mt-0.5">Orders</span>
+          {activeOrder && (
+            <span className="absolute top-0 right-1 w-2 h-2 rounded-full bg-orange-500 animate-ping"></span>
+          )}
+        </button>
 
-      {/* ORDER DETAILS POPUP MODAL */}
+        {userRole === 'admin' ? (
+          <button
+            onClick={() => setActivePanel('admin')}
+            className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${activePanel === 'admin' ? 'text-amber-600 font-black' : 'text-gray-500 font-semibold'}`}
+          >
+            <ShieldCheck className="w-5 h-5 text-amber-500" />
+            <span className="text-[10px] mt-0.5">Admin</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => setActivePanel('money')}
+            className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${activePanel === 'money' ? 'text-amber-600 font-black' : 'text-gray-500 font-semibold'}`}
+          >
+            <Coins className="w-5 h-5 text-orange-500" />
+            <span className="text-[10px] mt-0.5">Wallet</span>
+          </button>
+        )}
+
+        <button
+          onClick={() => setActivePanel('rewards')}
+          className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${activePanel === 'rewards' ? 'text-amber-600 font-black' : 'text-gray-500 font-semibold'}`}
+        >
+          <Crown className="w-5 h-5 text-amber-500" />
+          <span className="text-[10px] mt-0.5">Rewards</span>
+        </button>
+
+        <button
+          onClick={() => setIsCartOpen(true)}
+          className="flex flex-col items-center py-1 px-2 rounded-xl relative text-gray-700 font-bold"
+        >
+          <ShoppingBag className="w-5 h-5 text-amber-700" />
+          <span className="text-[10px] mt-0.5">Cart</span>
+          {totalCartCount > 0 && (
+            <span className="absolute -top-1 right-0 bg-rose-600 text-white font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center">
+              {totalCartCount}
+            </span>
+          )}
+        </button>
+      </nav>
+
+      {/* ========================================================
+          MODALS & OVERLAYS
+      ======================================================== */}
+
+      {/* 1. ORDER DETAILS POPUP MODAL */}
       {selectedOrderDetails && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border p-6 space-y-5 relative" style={{ borderColor: '#BBAB47' }}>
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border p-6 space-y-4 relative" style={{ borderColor: '#BBAB47' }}>
             <button onClick={() => setSelectedOrderDetails(null)} className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition cursor-pointer">
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: '#BBAB47' }}>
               <div>
-                <h3 className="text-lg font-black text-gray-900">Order Details - {selectedOrderDetails.id}</h3>
+                <h3 className="text-base sm:text-lg font-black text-gray-900">Order Details - {selectedOrderDetails.id}</h3>
                 <p className="text-[10px] text-gray-500">Placed on {selectedOrderDetails.date}</p>
               </div>
               <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg ${selectedOrderDetails.statusIndex === 4 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                {selectedOrderDetails.statusIndex === -1 ? 'Cancelled' : selectedOrderDetails.steps[selectedOrderDetails.statusIndex]}
+                {selectedOrderDetails.statusIndex === -1 ? 'Cancelled' : (selectedOrderDetails.steps?.[selectedOrderDetails.statusIndex] || 'Confirmed')}
               </span>
             </div>
 
-            <div className="space-y-4 text-xs font-semibold text-gray-700">
+            <div className="space-y-3 text-xs font-semibold text-gray-700">
               <div className="p-3 bg-amber-50/50 rounded-2xl border" style={{ borderColor: '#BBAB47' }}>
                 <p className="font-black text-gray-900 uppercase text-[10px] mb-1">Ordered Items</p>
                 <p className="font-extrabold text-orange-700">{selectedOrderDetails.items}</p>
@@ -1635,20 +1799,22 @@ export default function Dashboard() {
                   className="flex-1 py-3 text-white font-black text-xs rounded-xl shadow transition cursor-pointer bg-orange-500 hover:bg-orange-600 flex items-center justify-center space-x-1"
                 >
                   <span>🛵</span>
-                  <span>Open Live GPS Map Tracker</span>
+                  <span>Open Live GPS Tracker</span>
                 </button>
               )}
-              <button 
-                onClick={() => {
-                  const toReorder = selectedOrderDetails;
-                  setSelectedOrderDetails(null);
-                  handleReorder(toReorder);
-                }}
-                className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-extrabold text-xs rounded-xl transition cursor-pointer flex items-center space-x-1"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Reorder</span>
-              </button>
+
+              {selectedOrderDetails.statusIndex < 2 && selectedOrderDetails.statusIndex !== -1 && (
+                <button
+                  onClick={() => {
+                    cancelOrder(selectedOrderDetails.id);
+                    setSelectedOrderDetails(null);
+                  }}
+                  className="px-4 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl transition cursor-pointer"
+                >
+                  Cancel Order
+                </button>
+              )}
+
               <button 
                 onClick={() => setSelectedOrderDetails(null)} 
                 className="px-5 py-3 text-white font-black text-xs rounded-xl shadow transition cursor-pointer" 
@@ -1661,14 +1827,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* SWIGGY 2-STEP RICH CHECKOUT MODAL (ADDRESS, ITEMS, INSTRUCTIONS, TIP, BILL, UPI/CARDS/COD) */}
+      {/* 2. SWIGGY 2-STEP RICH CHECKOUT MODAL */}
       <SwiggyCheckoutModal
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
-        cartData={cartData}
+        cartData={cartData || []}
         onUpdateQty={updateCartQtyByKey}
         onClearCart={() => setCartData([])}
-        addressList={addressList}
+        addressList={addressList || []}
         currentAddress={defaultAddrObj}
         onSelectAddress={setDefaultAddress}
         onAddNewAddressModal={() => setShowAddAddressModal(true)}
@@ -1679,7 +1845,7 @@ export default function Dashboard() {
         onEarnRewardPoints={handleEarnRewardPoints}
       />
 
-      {/* SWIGGY LIVE GPS DELIVERY TRACKING MODAL */}
+      {/* 3. SWIGGY LIVE GPS DELIVERY TRACKING MODAL */}
       {activeTrackingOrder && (
         <SwiggyLiveTracking
           order={activeTrackingOrder}
@@ -1692,7 +1858,7 @@ export default function Dashboard() {
         />
       )}
 
-      {/* SWIGGY 5-STAR RATING & VALET FEEDBACK MODAL */}
+      {/* 4. SWIGGY 5-STAR RATING & FEEDBACK MODAL */}
       {ratingOrder && (
         <SwiggyRatingModal
           order={ratingOrder}
@@ -1701,11 +1867,11 @@ export default function Dashboard() {
         />
       )}
 
-      {/* FLOATING LIVE SWIGGY DELIVERY PILL (WHEN ACTIVE ORDER EXISTS & MODALS ARE CLOSED) */}
+      {/* 5. FLOATING LIVE ORDER TRACKING PILL */}
       {activeOrder && !activeTrackingOrder && !isCartOpen && (
         <div 
           onClick={() => setActiveTrackingOrder(activeOrder)}
-          className="fixed bottom-5 right-5 z-40 bg-gray-950 text-white px-4 py-3 rounded-2xl shadow-2xl border-2 border-orange-500 flex items-center space-x-3 cursor-pointer hover:scale-105 transition-all group animate-float-gentle"
+          className="fixed bottom-16 sm:bottom-5 right-4 sm:right-5 z-40 bg-gray-950 text-white px-4 py-3 rounded-2xl shadow-2xl border-2 border-orange-500 flex items-center space-x-3 cursor-pointer hover:scale-105 transition-all group animate-float-gentle"
         >
           <div className="relative">
             <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center text-base">
@@ -1719,7 +1885,7 @@ export default function Dashboard() {
               <span className="text-[9px] text-gray-400">#{activeOrder.id}</span>
             </div>
             <p className="text-xs font-black text-white">
-              Ramesh is arriving • <span className="text-orange-400">24 mins</span>
+              Arriving in • <span className="text-orange-400">24 mins</span>
             </p>
           </div>
           <span className="bg-orange-500 text-white font-black text-[10px] px-2.5 py-1.5 rounded-xl group-hover:bg-orange-600 flex items-center space-x-1">
@@ -1729,14 +1895,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* LOCATION SELECTOR MODAL */}
+      {/* 6. LOCATION PICKER MODAL */}
       {isLocationOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="relative w-full max-w-md bg-white rounded-t-[32px] sm:rounded-[32px] overflow-hidden shadow-2xl p-6 text-center space-y-4">
             <h3 className="text-lg font-extrabold text-gray-900">Select Delivery Address</h3>
-            <p className="text-xs text-gray-500">Choose where you want your sweets & snacks delivered.</p>
+            <p className="text-xs text-gray-500">Choose where you want your sweets & snacks delivered in Puri.</p>
             <div className="space-y-2 max-h-48 overflow-y-auto text-left">
-              {addressList.map((addr: any) => (
+              {(addressList || []).map((addr: any) => (
                 <div key={addr.id} onClick={() => { setDefaultAddress(addr.id); setIsLocationOpen(false); }} className={`p-3 rounded-xl border text-xs font-bold cursor-pointer transition ${addr.isDefault ? 'bg-amber-50 border-orange-500 text-orange-900' : 'bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700'}`}>
                   <div className="flex justify-between">
                     <span>📍 {addr.address}, {addr.city} - {addr.pin}</span>
@@ -1755,20 +1921,20 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* PRODUCT DETAIL MODAL */}
+      {/* 7. PRODUCT DETAIL MODAL */}
       {modalProduct && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border relative" style={{ borderColor: '#BBAB47' }}>
             <button onClick={() => setModalProduct(null)} className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-black/50 hover:bg-black text-white flex items-center justify-center transition cursor-pointer"><X className="w-5 h-5" /></button>
-            <div className="relative h-64 sm:h-72 w-full overflow-hidden bg-gray-100">
+            <div className="relative h-56 sm:h-72 w-full overflow-hidden bg-gray-100">
               <img src={modalProduct.img} alt={modalProduct.name} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
               <span className="absolute top-4 left-4 px-3 py-1 rounded-full text-[11px] font-black uppercase text-white shadow" style={{ backgroundColor: '#c2b767' }}>{modalProduct.badge}</span>
               <div className="absolute bottom-4 left-5 right-5 text-white">
-                <h3 className="text-2xl font-black drop-shadow">{modalProduct.name}</h3>
+                <h3 className="text-xl sm:text-2xl font-black drop-shadow">{modalProduct.name}</h3>
               </div>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-5 sm:p-6 space-y-4">
               <div>
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">About This Item</h4>
                 <p className="text-xs sm:text-sm text-gray-600 mt-1.5 leading-relaxed font-medium">{modalProduct.desc}</p>
@@ -1776,22 +1942,31 @@ export default function Dashboard() {
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">Select Portion / Weight:</label>
                 <select value={selectedVariants[modalProduct.id] || 0} onChange={e => handleVariantChange(modalProduct.id, parseInt(e.target.value))} className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-gray-800 focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}>
-                  {modalProduct.variants && modalProduct.variants.map((v: any, idx: number) => <option key={idx} value={idx}>{v.label} - ₹{v.price}</option>)}
+                  {(modalProduct?.variants || []).map((v: any, idx: number) => <option key={idx} value={idx}>{v.label} - ₹{v.price}</option>)}
                 </select>
               </div>
               <div className="border-t border-dashed pt-4 flex items-center justify-between" style={{ borderColor: '#BBAB47' }}>
                 <div>
                   <p className="text-[11px] text-gray-400 font-bold uppercase">Price & Reward</p>
                   <div className="flex items-center space-x-2">
-                    <p className="text-2xl font-black" style={{ color: '#c2b767' }}>₹{modalProduct.variants[selectedVariants[modalProduct.id] || 0].price}</p>
+                    <p className="text-xl sm:text-2xl font-black" style={{ color: '#c2b767' }}>₹{modalProduct.variants?.[selectedVariants[modalProduct.id] || 0]?.price}</p>
                     <span className="text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-lg flex items-center space-x-1 shadow-xs">
                       <span>🪙</span>
-                      <span>+{getItemPoints(modalProduct.variants[selectedVariants[modalProduct.id] || 0].price)} Pts (Worth ₹{getItemPoints(modalProduct.variants[selectedVariants[modalProduct.id] || 0].price)})</span>
+                      <span>+{getItemPoints(modalProduct.variants?.[selectedVariants[modalProduct.id] || 0]?.price || 10)} Pts</span>
                     </span>
                   </div>
                 </div>
-                <button onClick={() => { addToCartFromItem(modalProduct); setModalProduct(null); }} className="px-6 py-3 text-white font-extrabold text-xs rounded-2xl shadow-lg transition cursor-pointer flex items-center space-x-2" style={{ backgroundColor: '#c2b767' }}>
-                  <ShoppingBag className="w-4 h-4" /><span>ADD TO CART</span>
+                <button 
+                  onClick={() => { 
+                    addToCartFromItem(modalProduct); 
+                    setModalProduct(null); 
+                  }} 
+                  disabled={(outOfStockItems || []).includes(modalProduct.id)}
+                  className="px-5 sm:px-6 py-2.5 sm:py-3 text-white font-extrabold text-xs rounded-2xl shadow-lg transition cursor-pointer flex items-center space-x-2 disabled:opacity-40" 
+                  style={{ backgroundColor: '#c2b767' }}
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  <span>{(outOfStockItems || []).includes(modalProduct.id) ? 'SOLD OUT' : 'ADD TO CART'}</span>
                 </button>
               </div>
             </div>
