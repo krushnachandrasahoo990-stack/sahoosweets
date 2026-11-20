@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, ShieldCheck, Lock, Eye, EyeOff, CheckCircle2, AlertCircle, Smartphone, Mail, Sparkles, ChefHat } from 'lucide-react';
+import { ArrowLeft, User, ShieldCheck, Lock, Eye, EyeOff, CheckCircle2, AlertCircle, Smartphone, Mail, Sparkles, KeyRound, Copy, Check } from 'lucide-react';
 import { sendOtpApi, verifyOtpApi } from '../services/api';
 
 interface LoginProps {
@@ -27,15 +27,16 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
   const [loginError, setLoginError] = useState('');
 
-  // OTP states
+  // OTP states (6-Digit OTP)
   const [step, setStep] = useState<'auth' | 'otp'>('auth');
   const [authType, setAuthType] = useState<'Login' | 'Registration'>('Login');
-  const [otpValue, setOtpValue] = useState('');
+  const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
+  const [activeOtpCode, setActiveOtpCode] = useState<string>('');
   const [showBanner, setShowBanner] = useState(false);
-  const [bannerText, setBannerText] = useState('');
   const [timer, setTimer] = useState(30);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState('');
+  const [copiedOtp, setCopiedOtp] = useState(false);
 
   useEffect(() => {
     let interval: any;
@@ -49,8 +50,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     e.preventDefault();
     const phoneRegex = /^[0-9]{10}$/;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const cleanTarget = loginId.trim();
 
-    if (!phoneRegex.test(loginId.trim()) && !emailRegex.test(loginId.trim())) {
+    if (!phoneRegex.test(cleanTarget) && !emailRegex.test(cleanTarget)) {
       setLoginError('✕ Please enter a valid 10-digit Phone Number or Email ID!');
       return;
     }
@@ -68,29 +70,72 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     triggerOtpFlow('Registration');
   };
 
+  // Generate 6-Digit OTP tied specifically to the entered contact
   const triggerOtpFlow = async (type: 'Login' | 'Registration') => {
     const target = loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
+    
+    // Generate secure 6-digit OTP
+    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    setActiveOtpCode(generatedOtp);
+
     setAuthType(type);
     setStep('otp');
-    setOtpValue('');
+    setOtpDigits(['', '', '', '', '', '']);
     setVerifyError('');
     setTimer(30);
-
-    const isEmail = target.includes('@');
-    setBannerText(isEmail ? `OTP sent to your email inbox: ${target}` : `SMS OTP sent to mobile number: +91 ${target}`);
     setShowBanner(true);
-    setTimeout(() => setShowBanner(false), 6000);
 
-    // Call backend API to dispatch OTP to phone / email
+    // Call backend OTP dispatch
     try {
-      await sendOtpApi(target, type);
+      const res = await sendOtpApi(target, type);
+      if (res && res.demoOtp) {
+        setActiveOtpCode(res.demoOtp);
+      }
     } catch {}
   };
 
+  // Handle 6-digit individual input changes
+  const handleDigitChange = (index: number, val: string) => {
+    const cleanVal = val.replace(/\D/g, '');
+    const newDigits = [...otpDigits];
+
+    if (cleanVal.length > 1) {
+      // Pasting full 6-digit code
+      const pasted = cleanVal.slice(0, 6).split('');
+      pasted.forEach((ch, idx) => {
+        newDigits[idx] = ch;
+      });
+      setOtpDigits(newDigits);
+      const nextFocus = Math.min(pasted.length, 5);
+      const el = document.getElementById(`otp-box-${nextFocus}`);
+      el?.focus();
+      return;
+    }
+
+    newDigits[index] = cleanVal;
+    setOtpDigits(newDigits);
+    setVerifyError('');
+
+    // Auto-advance to next input
+    if (cleanVal && index < 5) {
+      const nextEl = document.getElementById(`otp-box-${index + 1}`);
+      nextEl?.focus();
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
+      const prevEl = document.getElementById(`otp-box-${index - 1}`);
+      prevEl?.focus();
+    }
+  };
+
+  const fullEnteredOtp = otpDigits.join('');
+
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otpValue.length !== 4) {
-      setVerifyError('Please enter a valid 4-digit OTP.');
+    if (fullEnteredOtp.length !== 6) {
+      setVerifyError('Please enter the full 6-digit OTP code.');
       return;
     }
 
@@ -99,38 +144,39 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
     const target = loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
     let res: any = null;
+
     try {
-      res = await verifyOtpApi(target, otpValue);
+      res = await verifyOtpApi(target, fullEnteredOtp);
     } catch {}
 
     setIsVerifying(false);
 
-    if (res && res.success) {
-      try { localStorage.setItem('userPhone', target); } catch {}
+    // Verify against backend response, active generated OTP, or master testing OTP '123456'
+    const isSuccess = (res && res.success) || fullEnteredOtp === activeOtpCode || fullEnteredOtp === '123456';
+
+    if (isSuccess) {
+      try {
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('userPhone', target);
+        localStorage.setItem('userRole', loginRole);
+      } catch {}
       onLoginSuccess(loginRole);
     } else {
-      if (otpValue === '1234') {
-        try { localStorage.setItem('userPhone', target); } catch {}
-        onLoginSuccess(loginRole);
-      } else {
-        setVerifyError(res?.message || 'Incorrect OTP code! Hint: For test verification, use 1234.');
-      }
+      setVerifyError(res?.message || 'Incorrect 6-digit OTP. Please check your SMS/Email notification and try again.');
     }
   };
 
-  // Quick 1-Click Demo Login helpers
-  const handleQuickDemoLogin = (role: 'customer' | 'admin') => {
-    try {
-      localStorage.setItem('userPhone', role === 'admin' ? '9078699528' : '9876543210');
-      localStorage.setItem('userRole', role);
-    } catch {}
-    onLoginSuccess(role);
+  const fillDemoOtp = () => {
+    const code = activeOtpCode || '123456';
+    setOtpDigits(code.split(''));
+    setVerifyError('');
   };
 
-  if (step === 'otp') {
-    const target = loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
-    const isEmail = target.includes('@');
+  const targetIdentifier = loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
+  const isEmailTarget = targetIdentifier.includes('@');
+  const formattedTarget = isEmailTarget ? targetIdentifier : `+91 ${targetIdentifier}`;
 
+  if (step === 'otp') {
     return (
       <div 
         className="min-h-screen flex items-center justify-center p-4 relative font-sans bg-cover bg-center"
@@ -138,96 +184,126 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       >
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
 
-        {/* Real OTP sent confirmation notification */}
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-white border border-emerald-300 text-black px-6 py-3.5 rounded-2xl shadow-2xl flex items-center space-x-3 transition-all duration-300 ${showBanner ? 'translate-y-0 opacity-100' : '-translate-y-24 opacity-0'}`}>
-          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div>
-            <p className="text-[10px] uppercase font-black text-gray-500">Security Code Dispatched</p>
-            <p className="text-xs font-extrabold text-black">{bannerText}</p>
-          </div>
-          <button type="button" onClick={() => setShowBanner(false)} className="ml-4 text-gray-400 hover:text-black font-black text-sm cursor-pointer">×</button>
-        </div>
+        <div className="w-full max-w-md relative z-10 space-y-3">
+          
+          {/* IN-APP DEMO / DEV OTP NOTIFICATION TOAST */}
+          {showBanner && (
+            <div className="bg-amber-500 text-gray-950 p-4 rounded-3xl shadow-2xl border-2 border-amber-300 flex items-start justify-between gap-3 animate-bounce-once">
+              <div className="flex items-start space-x-3">
+                <div className="w-8 h-8 rounded-xl bg-black text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <Smartphone className="w-4 h-4" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-black/20 px-2 py-0.5 rounded-md">
+                      Sahoo SMS Gateway
+                    </span>
+                    <span className="text-[10px] font-bold">Just now</span>
+                  </div>
+                  <p className="text-xs font-black">
+                    Your Sahoo Sweets 6-Digit OTP is:{' '}
+                    <span className="bg-black text-amber-300 px-2.5 py-0.5 rounded-lg font-mono text-sm tracking-widest font-black inline-block ml-1 shadow-sm">
+                      {activeOtpCode || '123456'}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-gray-900 font-semibold">Sent to: {formattedTarget} (Valid for 5 mins)</p>
+                </div>
+              </div>
 
-        <div className="w-full max-w-md bg-white/95 backdrop-blur-xl border rounded-3xl p-6 sm:p-8 shadow-2xl text-center relative z-10" style={{ borderColor: '#BBAB47' }}>
-          <div className="flex items-center justify-between mb-6">
-            <button type="button" onClick={() => setStep('auth')} className="inline-flex items-center text-xs font-bold text-black hover:text-orange-600 cursor-pointer">
-              <ArrowLeft className="w-4 h-4 mr-1 text-black" /> Edit Details
-            </button>
-            <span className="px-2.5 py-0.5 rounded-lg text-[10px] uppercase font-black text-black" style={{ backgroundColor: '#c2b767' }}>
-              {loginRole.toUpperCase()} PORTAL
-            </span>
-          </div>
-
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 rounded-3xl flex items-center justify-center text-black shadow-lg" style={{ backgroundColor: '#c2b767' }}>
-              <ShieldCheck className="w-8 h-8 text-black" />
-            </div>
-          </div>
-
-          <h2 className="text-2xl font-black text-black">Verify OTP</h2>
-          <p className="text-xs text-black font-semibold mt-1">
-            {isEmail ? 'OTP sent to your registered email inbox:' : 'OTP sent via SMS to your mobile number:'}
-          </p>
-
-          <div className="inline-flex items-center space-x-1.5 my-2 px-3.5 py-1.5 rounded-xl border" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}>
-            {isEmail ? <Mail className="w-3.5 h-3.5 text-amber-800" /> : <Smartphone className="w-3.5 h-3.5 text-amber-800" />}
-            <span className="text-xs font-black text-black">{isEmail ? target : `+91 ${target}`}</span>
-          </div>
-
-          <p className="text-[11px] text-gray-500">Please enter the 4-digit code sent to you. (Testing hint: <strong>1234</strong>)</p>
-
-          {verifyError && (
-            <div className="mt-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{verifyError}</span>
+              <button
+                type="button"
+                onClick={fillDemoOtp}
+                className="px-2.5 py-1.5 bg-black hover:bg-gray-900 active:scale-95 text-amber-400 font-black text-[10px] rounded-xl shadow-md transition cursor-pointer shrink-0"
+              >
+                Auto-Fill
+              </button>
             </div>
           )}
 
-          <form onSubmit={handleVerifyOtp} className="mt-4 space-y-4">
-            <div>
-              <label className="block text-xs font-black text-black uppercase mb-2">Enter 4-Digit OTP</label>
-              <input
-                type="text"
-                maxLength={4}
-                value={otpValue}
-                onChange={(e) => {
-                  setOtpValue(e.target.value.replace(/\D/g, ''));
-                  setVerifyError('');
-                }}
-                placeholder="• • • •"
-                className="w-full py-3 text-center text-3xl tracking-widest font-black text-black rounded-xl border focus:bg-white focus:outline-none shadow-inner"
-                style={{ backgroundColor: '#f2c98340', borderColor: '#BBAB47' }}
-                autoFocus
-              />
-            </div>
-
-            <div className="flex items-center justify-between text-xs px-1">
-              <span className="font-semibold text-black">{timer > 0 ? `Resend OTP in ${timer}s` : "Didn't receive code?"}</span>
-              <button 
-                type="button" 
-                disabled={timer > 0} 
-                onClick={() => triggerOtpFlow(authType)}
-                className={`font-black hover:underline ${timer > 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer text-orange-600'}`}
-              >
-                Resend OTP
+          {/* OTP VERIFICATION CARD */}
+          <div className="bg-white/95 backdrop-blur-xl border rounded-3xl p-6 sm:p-8 shadow-2xl text-center" style={{ borderColor: '#BBAB47' }}>
+            <div className="flex items-center justify-between mb-5">
+              <button type="button" onClick={() => setStep('auth')} className="inline-flex items-center text-xs font-bold text-gray-700 hover:text-black cursor-pointer">
+                <ArrowLeft className="w-4 h-4 mr-1" /> Change {isEmailTarget ? 'Email' : 'Number'}
               </button>
+              <span className="px-2.5 py-1 rounded-lg text-[10px] uppercase font-black tracking-wider text-black" style={{ backgroundColor: '#c2b767' }}>
+                {loginRole === 'admin' ? 'ADMIN VERIFICATION' : 'CUSTOMER LOGIN'}
+              </span>
             </div>
 
-            <button 
-              type="submit" 
-              disabled={isVerifying}
-              className="w-full py-3.5 text-black font-black text-xs rounded-xl shadow-lg transition cursor-pointer flex items-center justify-center space-x-2" 
-              style={{ backgroundColor: '#c2b767' }}
-            >
-              {isVerifying ? (
-                <span>Verifying OTP...</span>
-              ) : (
-                <span>VERIFY & OPEN SAHOO SWEETS</span>
-              )}
-            </button>
-          </form>
+            <div className="flex justify-center mb-3">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-black shadow-md" style={{ backgroundColor: '#c2b767' }}>
+                <KeyRound className="w-7 h-7 text-black" />
+              </div>
+            </div>
+
+            <h2 className="text-2xl font-black text-gray-900">Enter 6-Digit OTP</h2>
+            
+            {/* Target Contact Display */}
+            <div className="mt-1.5 space-y-1">
+              <p className="text-xs text-gray-600 font-medium">
+                {isEmailTarget ? 'OTP sent to your email address:' : 'OTP sent via SMS to mobile number:'}
+              </p>
+              <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl border bg-amber-50/50" style={{ borderColor: '#BBAB47' }}>
+                {isEmailTarget ? <Mail className="w-3.5 h-3.5 text-amber-800 shrink-0" /> : <Smartphone className="w-3.5 h-3.5 text-amber-800 shrink-0" />}
+                <span className="text-xs font-black text-gray-900">{formattedTarget}</span>
+              </div>
+            </div>
+
+            {verifyError && (
+              <div className="mt-3.5 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{verifyError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleVerifyOtp} className="mt-5 space-y-4">
+              {/* 6 Digit Inputs */}
+              <div className="flex justify-center items-center gap-1.5 sm:gap-2">
+                {[0, 1, 2, 3, 4, 5].map(idx => (
+                  <input
+                    key={idx}
+                    id={`otp-box-${idx}`}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={otpDigits[idx]}
+                    onChange={e => handleDigitChange(idx, e.target.value)}
+                    onKeyDown={e => handleKeyDown(idx, e)}
+                    className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-xl border border-amber-300 focus:border-amber-600 focus:ring-2 focus:ring-amber-200 bg-amber-50/40 text-gray-950 focus:bg-white outline-none shadow-xs transition"
+                    autoFocus={idx === 0}
+                  />
+                ))}
+              </div>
+
+              {/* Timer and Resend */}
+              <div className="flex items-center justify-between text-xs px-2 pt-1 text-gray-600 font-semibold">
+                <span>{timer > 0 ? `Resend OTP in ${timer}s` : "Didn't receive OTP?"}</span>
+                <button 
+                  type="button" 
+                  disabled={timer > 0} 
+                  onClick={() => triggerOtpFlow(authType)}
+                  className={`font-black ${timer > 0 ? 'opacity-40 cursor-not-allowed' : 'text-orange-600 hover:underline cursor-pointer'}`}
+                >
+                  Resend OTP
+                </button>
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={isVerifying || fullEnteredOtp.length !== 6}
+                className="w-full py-3.5 text-black font-black text-xs sm:text-sm rounded-xl shadow-lg transition cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-40" 
+                style={{ backgroundColor: '#c2b767' }}
+              >
+                {isVerifying ? (
+                  <span>Verifying Code...</span>
+                ) : (
+                  <span>VERIFY OTP & ENTER SAHOO SWEETS ➔</span>
+                )}
+              </button>
+            </form>
+          </div>
+
         </div>
       </div>
     );
@@ -242,26 +318,34 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
       <div className="w-full max-w-md relative z-10 py-4">
         
-        {/* Quick Demo Access Bar for Evaluation */}
+        {/* Role Helper Demo Banner */}
         <div className="mb-3 bg-white/95 backdrop-blur-md rounded-2xl p-2.5 border border-amber-300 shadow-xl flex items-center justify-between text-xs font-black">
           <span className="text-[11px] text-gray-700 flex items-center space-x-1">
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Quick 1-Click Login:</span>
+            <span>Select Demo Role:</span>
           </span>
           <div className="flex space-x-1.5">
             <button
               type="button"
-              onClick={() => handleQuickDemoLogin('customer')}
+              onClick={() => {
+                setLoginRole('customer');
+                setLoginId('9876543210');
+                triggerOtpFlow('Login');
+              }}
               className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[10px] font-black transition cursor-pointer"
             >
-              🛍️ Customer
+              🛍️ Customer OTP
             </button>
             <button
               type="button"
-              onClick={() => handleQuickDemoLogin('admin')}
+              onClick={() => {
+                setLoginRole('admin');
+                setLoginId('9078699528');
+                triggerOtpFlow('Login');
+              }}
               className="px-2.5 py-1 bg-black hover:bg-gray-800 text-amber-400 rounded-lg text-[10px] font-black transition cursor-pointer"
             >
-              👑 Admin Owner
+              👑 Admin OTP
             </button>
           </div>
         </div>
@@ -276,8 +360,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             </div>
 
             <div className="text-center mb-4">
-              <h2 className="text-2xl font-black text-black">Welcome Back</h2>
-              <p className="text-xs font-bold mt-0.5 text-black">Sign in to order sweets & track delivery</p>
+              <h2 className="text-2xl font-black text-gray-900">Sign In with OTP</h2>
+              <p className="text-xs font-semibold mt-0.5 text-gray-600">Enter your Phone or Email to get 6-digit code</p>
             </div>
 
             {/* ROLE SELECTOR TABS */}
@@ -289,7 +373,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 style={{ backgroundColor: loginRole === 'customer' ? '#c2b767' : 'transparent' }}
               >
                 <User className="w-4 h-4 text-black" />
-                <span className="text-black">Customer Store</span>
+                <span>Customer Store</span>
               </button>
               <button 
                 type="button" 
@@ -303,17 +387,19 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
             <form onSubmit={handleLoginSubmit} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-black text-black uppercase mb-1">
-                  {loginRole === 'admin' ? 'Admin Phone / Email' : 'Customer Phone No or Email'}
+                <label className="block text-xs font-black text-gray-800 uppercase mb-1">
+                  {loginRole === 'admin' ? 'Admin Phone / Email' : 'Phone Number or Email Address'}
                 </label>
                 <div className="relative flex items-center">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-black"><User className="w-4 h-4 text-black" /></span>
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-500">
+                    <User className="w-4 h-4" />
+                  </span>
                   <input 
                     type="text" 
                     value={loginId}
                     onChange={(e) => setLoginId(e.target.value)}
                     required 
-                    placeholder={loginRole === 'admin' ? "9078699528 / admin@sahoosweets.com" : "e.g. 9078699528"} 
+                    placeholder={loginRole === 'admin' ? "9078699528 or admin@sahoosweets.com" : "e.g. 9876543210 or user@gmail.com"} 
                     className="w-full pl-10 pr-4 py-2.5 border rounded-xl text-xs font-black text-black placeholder-gray-500 focus:bg-white focus:outline-none"
                     style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}
                   />
@@ -322,9 +408,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-black text-black uppercase mb-1">Password</label>
+                <label className="block text-xs font-black text-gray-800 uppercase mb-1">Password</label>
                 <div className="relative flex items-center">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-black"><Lock className="w-4 h-4 text-black" /></span>
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-500"><Lock className="w-4 h-4" /></span>
                   <input 
                     type={showPassword ? 'text' : 'password'}
                     value={loginPassword}
@@ -334,19 +420,19 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                     className="w-full pl-10 pr-11 py-2.5 border rounded-xl text-xs font-black text-black placeholder-gray-500 focus:bg-white focus:outline-none"
                     style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}
                   />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-black cursor-pointer">
-                    {showPassword ? <EyeOff className="w-4 h-4 text-black" /> : <Eye className="w-4 h-4 text-black" />}
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-600 cursor-pointer">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
-              <button type="submit" className="w-full py-3 text-black font-black text-xs rounded-xl shadow-lg transition cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
-                SIGN IN AS {loginRole === 'admin' ? 'ADMIN' : 'CUSTOMER'} & SEND OTP
+              <button type="submit" className="w-full py-3.5 text-black font-black text-xs sm:text-sm rounded-xl shadow-lg transition cursor-pointer flex items-center justify-center space-x-2" style={{ backgroundColor: '#c2b767' }}>
+                <span>SEND 6-DIGIT OTP TO CONTACT ➔</span>
               </button>
             </form>
 
-            <p className="text-center text-xs text-black font-bold mt-5">
-              New Customer? <button type="button" onClick={() => setIsFlipped(true)} className="font-black text-black hover:underline cursor-pointer">Create Account</button>
+            <p className="text-center text-xs text-gray-700 font-bold mt-5">
+              New to Sahoo Sweets? <button type="button" onClick={() => setIsFlipped(true)} className="font-black text-black hover:underline cursor-pointer">Register Account</button>
             </p>
           </div>
 
@@ -354,12 +440,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           <div className="bg-white/95 backdrop-blur-xl border rounded-3xl p-6 sm:p-7 shadow-2xl absolute inset-0 [transform:rotateY(180deg)]" style={{ backfaceVisibility: 'hidden', borderColor: '#BBAB47' }}>
             <div className="text-center mb-2">
               <h2 className="text-xl font-black text-black">Create Account</h2>
-              <p className="text-[11px] font-bold text-black">Choose role & register</p>
+              <p className="text-[11px] font-bold text-gray-600">Choose role & register</p>
             </div>
 
             <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl border mb-3" style={{ backgroundColor: '#f2c98350', borderColor: '#BBAB47' }}>
-              <button type="button" onClick={() => setSignupRole('customer')} className={`py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${signupRole === 'customer' ? 'text-black shadow' : 'text-black'}`} style={{ backgroundColor: signupRole === 'customer' ? '#c2b767' : 'transparent' }}>Customer</button>
-              <button type="button" onClick={() => setSignupRole('admin')} className={`py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${signupRole === 'admin' ? 'bg-black text-amber-400 shadow' : 'text-black'}`}>Admin (Owner)</button>
+              <button type="button" onClick={() => setSignupRole('customer')} className={`py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${signupRole === 'customer' ? 'text-black shadow' : 'text-gray-700'}`} style={{ backgroundColor: signupRole === 'customer' ? '#c2b767' : 'transparent' }}>Customer</button>
+              <button type="button" onClick={() => setSignupRole('admin')} className={`py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${signupRole === 'admin' ? 'bg-black text-amber-400 shadow' : 'text-gray-700'}`}>Admin (Owner)</button>
             </div>
 
             <form onSubmit={handleSignupSubmit} className="space-y-2">
@@ -381,7 +467,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <div className="relative flex items-center">
                   <input type={showSignupPassword ? 'text' : 'password'} value={signupPassword} onChange={e => setSignupPassword(e.target.value)} required placeholder="Password" className="w-full px-3 py-1.5 pr-9 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
                   <button type="button" onClick={() => setShowSignupPassword(!showSignupPassword)} className="absolute right-2.5 text-black cursor-pointer">
-                    {showSignupPassword ? <EyeOff className="w-4 h-4 text-black" /> : <Eye className="w-4 h-4 text-black" />}
+                    {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -391,7 +477,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <div className="relative flex items-center">
                   <input type={showConfirmPassword ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required placeholder="Confirm Password" className="w-full px-3 py-1.5 pr-9 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
                   <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-2.5 text-black cursor-pointer">
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4 text-black" /> : <Eye className="w-4 h-4 text-black" />}
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -401,7 +487,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <label className="ml-2 text-[10px] font-bold text-black">I agree to Terms & Conditions</label>
               </div>
               <button type="submit" className="w-full py-2.5 text-black font-black text-xs rounded-xl shadow cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
-                REGISTER & SEND SMS OTP
+                REGISTER & SEND 6-DIGIT OTP
               </button>
             </form>
 

@@ -115,7 +115,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
         items: "Pahala Style Rosgola (1 Kg), Bara (4 Pcs)", 
         total: 370, 
         statusIndex: 3, 
-        steps: ["Order Confirmed", "Placed", "Preparing/Shipped", "Out for Delivery", "Delivered"],
+        steps: ["Order Confirmed", "Placed", "Shipped/Preparing", "Out for Delivery", "Delivered"],
         payment: "Cash on Delivery",
         address: "At/Po - Nagapur, Brahmagiri Road, Puri, Odisha - 752001"
       }
@@ -270,11 +270,19 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
     return init;
   });
 
+  const isAdmin = userRole === 'admin';
   const [activePanel, setActivePanel] = useState<string>(() => userRole === 'admin' ? 'admin' : 'dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [modalProduct, setModalProduct] = useState<any | null>(null);
   const [isLocationOpen, setIsLocationOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+
+  // Strict Role-Based Access Guard: Customers are strictly forbidden from viewing Admin Panel
+  useEffect(() => {
+    if (!isAdmin && activePanel === 'admin') {
+      setActivePanel('dashboard');
+    }
+  }, [isAdmin, activePanel]);
 
   useEffect(() => {
     try { localStorage.setItem('sahooSweetsFavorites', JSON.stringify(favorites)); } catch {}
@@ -502,24 +510,22 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
               )}
             </div>
 
-            {/* Role Switcher Pill */}
-            {!isSidebarCollapsed && (
+            {/* Role Switcher Pill (Admin ONLY: Strictly hidden from customers) */}
+            {!isSidebarCollapsed && isAdmin && (
               <div className="px-1">
                 <div className="p-2 bg-[#191f28] rounded-xl border border-gray-800 flex items-center justify-between">
                   <div className="flex items-center space-x-1.5 overflow-hidden">
-                    <span className="text-xs">{userRole === 'admin' ? '👑' : '🛍️'}</span>
-                    <span className="text-[11px] font-black text-white truncate uppercase">
-                      {userRole === 'admin' ? 'Admin Portal' : 'Customer Store'}
+                    <span className="text-xs">👑</span>
+                    <span className="text-[11px] font-black text-amber-400 truncate uppercase">
+                      Admin Access
                     </span>
                   </div>
-                  {onSwitchRole && (
-                    <button
-                      onClick={() => onSwitchRole(userRole === 'admin' ? 'customer' : 'admin')}
-                      className="text-[9px] font-black bg-amber-500 hover:bg-amber-600 text-black px-2 py-0.5 rounded-md transition cursor-pointer"
-                    >
-                      Switch
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setActivePanel(activePanel === 'admin' ? 'dashboard' : 'admin')}
+                    className="text-[9px] font-black bg-amber-500 hover:bg-amber-600 text-black px-2 py-0.5 rounded-md transition cursor-pointer"
+                  >
+                    {activePanel === 'admin' ? 'Storefront ➔' : 'Admin Ops ➔'}
+                  </button>
                 </div>
               </div>
             )}
@@ -664,15 +670,16 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
                 <Search className="w-4 h-4" />
               </button>
 
-              {/* Admin Mode Badge & Switcher */}
-              {userRole === 'admin' ? (
+              {/* Admin Mode Badge & Switcher (Strictly hidden from customers) */}
+              {isAdmin && (
                 <button
-                  onClick={() => setActivePanel('admin')}
-                  className="hidden md:flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-black text-amber-400 border border-amber-400/30 text-xs font-black shadow-xs"
+                  onClick={() => setActivePanel(activePanel === 'admin' ? 'dashboard' : 'admin')}
+                  className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-black text-amber-400 border border-amber-400/40 text-xs font-black shadow-xs hover:bg-gray-900 transition cursor-pointer"
                 >
-                  <span>👑 Admin Portal</span>
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>{activePanel === 'admin' ? '🛍️ View Storefront' : '👑 Admin Portal'}</span>
                 </button>
-              ) : null}
+              )}
 
               {/* Sahoo Money Wallet Header Button */}
               <button 
@@ -747,9 +754,9 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
           <main className="flex-1 px-3 sm:px-8 py-5 sm:py-6 overflow-y-auto">
 
             {/* ========================================================
-                1. ADMIN MANAGEMENT & INVENTORY PANEL
+                1. ADMIN MANAGEMENT & INVENTORY PANEL (Strictly Admin only)
             ======================================================== */}
-            {activePanel === 'admin' && (
+            {isAdmin && activePanel === 'admin' && (
               <div className="max-w-5xl mx-auto space-y-6 pb-12">
                 <div className="bg-gradient-to-r from-gray-950 via-gray-900 to-black rounded-3xl p-6 sm:p-8 text-white border border-amber-400/40 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                   <div className="space-y-1">
@@ -853,7 +860,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
                             >
                               <option value={0}>0: Order Confirmed</option>
                               <option value={1}>1: Placed</option>
-                              <option value={2}>2: Preparing / Shipped</option>
+                              <option value={2}>2: Shipped/Preparing</option>
                               <option value={3}>3: Out for Delivery</option>
                               <option value={4}>4: Delivered</option>
                               <option value={-1}>-1: Cancelled</option>
@@ -1153,7 +1160,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
                           style={{ width: `${(activeOrder.statusIndex / 4) * 88}%` }}
                         ></div>
 
-                        {(activeOrder.steps || ["Order Confirmed", "Placed", "Preparing/Shipped", "Out for Delivery", "Delivered"]).map((st: string, sIdx: number) => {
+                        {(activeOrder.steps || ["Order Confirmed", "Placed", "Shipped/Preparing", "Out for Delivery", "Delivered"]).map((st: string, sIdx: number) => {
                           const isDone = sIdx <= activeOrder.statusIndex;
                           const isCurrent = sIdx === activeOrder.statusIndex;
                           return (
@@ -1206,7 +1213,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
                   ) : (
                     (pastOrders || []).map((order: any) => {
                       if (!order) return null;
-                      const stepsList = Array.isArray(order.steps) ? order.steps : ["Order Confirmed", "Placed", "Preparing/Shipped", "Out for Delivery", "Delivered"];
+                      const stepsList = Array.isArray(order.steps) ? order.steps : ["Order Confirmed", "Placed", "Shipped/Preparing", "Out for Delivery", "Delivered"];
                       const currentIdx = typeof order.statusIndex === 'number' ? order.statusIndex : 1;
                       const isDelivered = currentIdx === 4;
                       const isCancelled = currentIdx === -1;
@@ -1703,23 +1710,23 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
           )}
         </button>
 
-        {userRole === 'admin' ? (
+        {isAdmin && (
           <button
-            onClick={() => setActivePanel('admin')}
+            onClick={() => setActivePanel(activePanel === 'admin' ? 'dashboard' : 'admin')}
             className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${activePanel === 'admin' ? 'text-amber-600 font-black' : 'text-gray-500 font-semibold'}`}
           >
             <ShieldCheck className="w-5 h-5 text-amber-500" />
-            <span className="text-[10px] mt-0.5">Admin</span>
-          </button>
-        ) : (
-          <button
-            onClick={() => setActivePanel('money')}
-            className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${activePanel === 'money' ? 'text-amber-600 font-black' : 'text-gray-500 font-semibold'}`}
-          >
-            <Coins className="w-5 h-5 text-orange-500" />
-            <span className="text-[10px] mt-0.5">Wallet</span>
+            <span className="text-[10px] mt-0.5">{activePanel === 'admin' ? 'Store' : 'Admin'}</span>
           </button>
         )}
+
+        <button
+          onClick={() => setActivePanel('money')}
+          className={`flex flex-col items-center py-1 px-2 rounded-xl transition ${activePanel === 'money' ? 'text-amber-600 font-black' : 'text-gray-500 font-semibold'}`}
+        >
+          <Coins className="w-5 h-5 text-orange-500" />
+          <span className="text-[10px] mt-0.5">Wallet</span>
+        </button>
 
         <button
           onClick={() => setActivePanel('rewards')}

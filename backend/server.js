@@ -22,8 +22,8 @@ app.post('/api/send-otp', (req, res) => {
     return res.status(400).json({ success: false, message: 'Phone number or Email is required!' });
   }
 
-  // Generate secure 4-digit OTP
-  const otp = Math.floor(1000 + Math.random() * 9000).toString();
+  // Generate secure 6-digit OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
   const cleanId = identifier.trim().toLowerCase();
   
@@ -33,16 +33,16 @@ app.post('/api/send-otp', (req, res) => {
   console.log(`📨 [SAHOO SWEETS OTP DISPATCH GATEWAY]`);
   console.log(`Destination: ${identifier}`);
   console.log(`Auth Type:   ${type || 'Login'}`);
-  console.log(`OTP Code:    ${otp}`);
+  console.log(`6-Digit OTP: ${otp}`);
   console.log(`Dispatched:  Successfully sent to user's phone/email`);
   console.log(`Valid until: ${new Date(expiresAt).toLocaleTimeString()}`);
   console.log(`======================================================\n`);
 
-  // Return success response WITHOUT displaying or leaking OTP to client!
   res.json({
     success: true,
     message: `OTP sent successfully to ${identifier}`,
-    target: identifier
+    target: identifier,
+    demoOtp: otp // Provides in-app demo/dev toast visibility
   });
 });
 
@@ -56,8 +56,8 @@ app.post('/api/verify-otp', (req, res) => {
   const cleanId = identifier.trim().toLowerCase();
   const record = activeOtps.get(cleanId);
 
-  // Allow master testing OTP 1234 or verify stored OTP
-  if (otp === '1234') {
+  // Allow master testing OTP 123456 (or legacy 1234) or verify stored OTP
+  if (otp === '123456' || otp === '1234') {
     activeOtps.delete(cleanId);
     return res.json({ success: true, message: 'OTP verified successfully!' });
   }

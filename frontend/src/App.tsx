@@ -14,7 +14,7 @@ export default function App() {
   const [userRole, setUserRole] = useState<'customer' | 'admin'>(() => {
     try {
       const stored = localStorage.getItem('userRole');
-      return (stored === 'admin' || stored === 'customer') ? stored : 'customer';
+      return stored === 'admin' ? 'admin' : 'customer';
     } catch {
       return 'customer';
     }
@@ -26,9 +26,9 @@ export default function App() {
       const role = localStorage.getItem('userRole');
       if (auth === 'true') {
         setIsAuthenticated(true);
-        if (role === 'admin' || role === 'customer') {
-          setUserRole(role);
-        }
+        setUserRole(role === 'admin' ? 'admin' : 'customer');
+      } else {
+        setIsAuthenticated(false);
       }
     } catch {}
   }, []);
@@ -46,12 +46,15 @@ export default function App() {
     try {
       localStorage.removeItem('isAuthenticated');
       localStorage.removeItem('userRole');
+      localStorage.removeItem('userPhone');
     } catch {}
     setIsAuthenticated(false);
     setUserRole('customer');
   };
 
+  // Strict Role-Based Access: Only Admin is permitted to toggle between Admin and Customer Storefront
   const handleSwitchRole = (newRole: 'customer' | 'admin') => {
+    if (userRole !== 'admin') return;
     try {
       localStorage.setItem('userRole', newRole);
     } catch {}
@@ -66,7 +69,7 @@ export default function App() {
     <Dashboard 
       userRole={userRole} 
       onLogout={handleLogout} 
-      onSwitchRole={handleSwitchRole} 
+      onSwitchRole={userRole === 'admin' ? handleSwitchRole : undefined} 
     />
   );
 }

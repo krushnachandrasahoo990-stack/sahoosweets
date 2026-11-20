@@ -260,11 +260,11 @@ export const SwiggyCheckoutModal: React.FC<SwiggyCheckoutModalProps> = ({
       total: finalPayable,
       sahooMoneyUsed: sahooMoneyApplied,
       pointsEarned: earnableRewardPoints,
-      statusIndex: 0, // 0: Order Confirmed, 1: Placed, 2: Preparing/Shipped, 3: Out for Delivery, 4: Delivered
+      statusIndex: 0, // 0: Order Confirmed, 1: Placed, 2: Shipped/Preparing, 3: Out for Delivery, 4: Delivered
       steps: [
         "Order Confirmed",
         "Placed",
-        "Preparing/Shipped",
+        "Shipped/Preparing",
         "Out for Delivery",
         "Delivered"
       ],

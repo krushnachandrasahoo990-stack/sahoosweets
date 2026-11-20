@@ -405,7 +405,7 @@ export const SwiggyLiveTracking: React.FC<SwiggyLiveTrackingProps> = ({
                   style={{ width: `${(currentStep / 4) * 90}%` }}
                 ></div>
 
-                {(order.steps || ["Order Confirmed", "Placed", "Preparing / Shipped", "Out for Delivery", "Delivered"]).map((st, idx) => {
+                {(order.steps || ["Order Confirmed", "Placed", "Shipped/Preparing", "Out for Delivery", "Delivered"]).map((st, idx) => {
                   const isDone = idx <= currentStep;
                   const isCurrent = idx === currentStep;
                   return (
