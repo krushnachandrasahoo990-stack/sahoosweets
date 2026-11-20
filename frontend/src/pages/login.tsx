@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, User, ShieldCheck, Lock, Eye, EyeOff, CheckCircle2, 
-  AlertCircle, Smartphone, Mail, Sparkles, KeyRound, Loader2, Check 
+  AlertCircle, Smartphone, Mail, Sparkles, KeyRound, Loader2 
 } from 'lucide-react';
 import { sendOtpApi, verifyOtpApi } from '../services/api';
 
@@ -179,7 +179,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       } else {
         setShowBanner(false);
       }
-    } catch (err: any) {
+    } catch {
       setLoginError('Network error connecting to OTP gateway. Please retry.');
     } finally {
       setIsSendingOtp(false);
@@ -266,7 +266,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   };
 
   // ---------------------------------------------------------------------------
-  // RENDER: STEP 2 - OTP VERIFICATION CARD
+  // STEP 2: OTP VERIFICATION VIEW
   // ---------------------------------------------------------------------------
   if (step === 'otp') {
     return (
@@ -409,7 +409,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   }
 
   // ---------------------------------------------------------------------------
-  // RENDER: STEP 1 - LOGIN / REGISTRATION WITH AUTO-DETECTION
+  // STEP 1: LOGIN / SIGNUP WITH AUTO-DETECTION
   // ---------------------------------------------------------------------------
   return (
     <div 
