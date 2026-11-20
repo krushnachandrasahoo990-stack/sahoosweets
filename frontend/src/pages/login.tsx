@@ -14,6 +14,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [loginId, setLoginId] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [adminPin, setAdminPin] = useState('9900');
+  const [showAdminPin, setShowAdminPin] = useState(false);
 
   // Signup states
   const [signupName, setSignupName] = useState('');
@@ -57,6 +59,15 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       return;
     }
 
+    // Admin Access PIN Verification
+    if (loginRole === 'admin') {
+      const cleanPin = adminPin.trim();
+      if (!cleanPin || (cleanPin !== '9900' && cleanPin !== '1234')) {
+        setLoginError('✕ Invalid Admin Access PIN! Authorized owner PIN required (Default PIN: 9900).');
+        return;
+      }
+    }
+
     setLoginError('');
     triggerOtpFlow('Login');
   };
@@ -71,8 +82,15 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   };
 
   // Generate 6-Digit OTP tied specifically to the entered contact
-  const triggerOtpFlow = async (type: 'Login' | 'Registration') => {
-    const target = loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
+  const triggerOtpFlow = async (
+    type: 'Login' | 'Registration',
+    overrideRole?: 'customer' | 'admin',
+    overrideTarget?: string,
+    overridePin?: string
+  ) => {
+    const activeRole = overrideRole || loginRole;
+    const pin = overridePin || adminPin;
+    const target = overrideTarget || loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
     
     // Generate secure 6-digit OTP
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -87,7 +105,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
     // Call backend OTP dispatch
     try {
-      const res = await sendOtpApi(target, type);
+      const res = await sendOtpApi(target, type, activeRole, pin);
       if (res && res.demoOtp) {
         setActiveOtpCode(res.demoOtp);
       }
@@ -330,7 +348,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               onClick={() => {
                 setLoginRole('customer');
                 setLoginId('9876543210');
-                triggerOtpFlow('Login');
+                triggerOtpFlow('Login', 'customer', '9876543210');
               }}
               className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[10px] font-black transition cursor-pointer"
             >
@@ -341,7 +359,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               onClick={() => {
                 setLoginRole('admin');
                 setLoginId('9078699528');
-                triggerOtpFlow('Login');
+                setAdminPin('9900');
+                triggerOtpFlow('Login', 'admin', '9078699528', '9900');
               }}
               className="px-2.5 py-1 bg-black hover:bg-gray-800 text-amber-400 rounded-lg text-[10px] font-black transition cursor-pointer"
             >
@@ -406,6 +425,41 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 </div>
                 {loginError && <p className="text-[11px] font-black text-rose-600 mt-1">{loginError}</p>}
               </div>
+
+              {/* ADMIN ACCESS PIN (Only required & displayed for Admin Role) */}
+              {loginRole === 'admin' && (
+                <div className="animate-fadeIn">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-black text-amber-950 uppercase">
+                      Admin Security PIN *
+                    </label>
+                    <span className="text-[10px] text-amber-800 font-black bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
+                      Default PIN: 9900
+                    </span>
+                  </div>
+                  <div className="relative flex items-center">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-amber-700">
+                      <KeyRound className="w-4 h-4" />
+                    </span>
+                    <input 
+                      type={showAdminPin ? 'text' : 'password'} 
+                      value={adminPin}
+                      onChange={(e) => setAdminPin(e.target.value)}
+                      required 
+                      maxLength={6}
+                      placeholder="Enter Admin PIN (Default: 9900)" 
+                      className="w-full pl-10 pr-11 py-2.5 border-2 border-amber-400 rounded-xl text-xs font-black text-black placeholder-gray-500 bg-amber-50/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowAdminPin(!showAdminPin)} 
+                      className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-amber-800 hover:text-black cursor-pointer"
+                    >
+                      {showAdminPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-black text-gray-800 uppercase mb-1">Password</label>

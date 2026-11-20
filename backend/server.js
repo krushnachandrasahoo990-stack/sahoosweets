@@ -1,4 +1,4 @@
-// --- Sahoo Sweets Backend Server ---
+// --- Sahoo Sweets Backend Server (Express) ---
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -12,74 +12,180 @@ const users = [
   { identifier: '9876543210', password: 'password123', role: 'customer', name: 'Customer' }
 ];
 
-// In-memory OTP storage with timestamps
+// In-memory OTP storage with timestamps: Map<identifier, { otp: string, expiresAt: number, role?: string }>
 const activeOtps = new Map();
 
-// Send OTP API Endpoint
-app.post('/api/send-otp', (req, res) => {
-  const { identifier, type } = req.body;
+// Authorized Admin Security PIN
+const ADMIN_ACCESS_PIN = '9900';
+
+// =============================================================================
+// 1. SEND OTP ROUTE (/api/auth/send-otp & alias /api/send-otp)
+// Generates a 6-digit OTP tied specifically to the entered phone or email
+// Valid for exactly 5 minutes (5 * 60 * 1000 ms)
+// =============================================================================
+const handleSendOtp = async (req, res) => {
+  const { identifier, type, role, adminPin } = req.body;
   if (!identifier) {
-    return res.status(400).json({ success: false, message: 'Phone number or Email is required!' });
+    return res.status(400).json({ success: false, message: 'Phone number or Email ID is required!' });
   }
 
-  // Generate secure 6-digit OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
   const cleanId = identifier.trim().toLowerCase();
+  const isEmail = cleanId.includes('@');
+
+  // Admin PIN verification if requesting OTP as Admin
+  if (role === 'admin') {
+    if (!adminPin || adminPin.trim() !== ADMIN_ACCESS_PIN) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Invalid Admin Access PIN! Authorized owner PIN required (Default PIN: 9900).' 
+      });
+    }
+  }
+
+  // Generate secure 6-digit numeric OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5-minute validity window
   
-  activeOtps.set(cleanId, { otp, expiresAt });
+  // Store in in-memory session cache tied strictly to cleanId
+  activeOtps.set(cleanId, { otp, expiresAt, role: role || 'customer' });
 
   console.log(`\n======================================================`);
   console.log(`📨 [SAHOO SWEETS OTP DISPATCH GATEWAY]`);
-  console.log(`Destination: ${identifier}`);
-  console.log(`Auth Type:   ${type || 'Login'}`);
-  console.log(`6-Digit OTP: ${otp}`);
-  console.log(`Dispatched:  Successfully sent to user's phone/email`);
-  console.log(`Valid until: ${new Date(expiresAt).toLocaleTimeString()}`);
+  console.log(`Target Contact: ${identifier}`);
+  console.log(`Target Type:    ${isEmail ? 'EMAIL ADDRESS' : 'SMS / MOBILE'}`);
+  console.log(`Auth Type:      ${type || 'Login'}`);
+  console.log(`Requested Role: ${role || 'customer'}`);
+  console.log(`Generated OTP:  ${otp} (6 Digits)`);
+  console.log(`Valid for:      5 Minutes (Expires at: ${new Date(expiresAt).toLocaleTimeString()})`);
+
+  // -------------------------------------------------------------
+  // SMS PROVIDER INTEGRATION PLACEHOLDER (Twilio / MSG91 / Fast2SMS)
+  // Plug in production SMS gateway here:
+  // -------------------------------------------------------------
+  /*
+  if (!isEmail) {
+    try {
+      // Example Twilio integration:
+      // const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
+      // await twilio.messages.create({
+      //   body: `Your Sahoo Sweets verification code is ${otp}. Valid for 5 minutes. Do not share this OTP.`,
+      //   from: process.env.TWILIO_PHONE_NUMBER,
+      //   to: identifier.startsWith('+') ? identifier : `+91${identifier}`
+      // });
+      console.log(`[SMS Gateway] Dispatched SMS to ${identifier}`);
+    } catch (smsError) {
+      console.error('[SMS Gateway Error]:', smsError);
+    }
+  }
+  */
+
+  // -------------------------------------------------------------
+  // EMAIL PROVIDER INTEGRATION PLACEHOLDER (Nodemailer / Resend / SendGrid)
+  // Plug in production email gateway here:
+  // -------------------------------------------------------------
+  /*
+  if (isEmail) {
+    try {
+      // Example Nodemailer integration:
+      // const nodemailer = require('nodemailer');
+      // const transporter = nodemailer.createTransport({ ... });
+      // await transporter.sendMail({
+      //   from: '"Sahoo Sweets" <no-reply@sahoosweets.com>',
+      //   to: identifier,
+      //   subject: 'Your Sahoo Sweets Verification Code',
+      //   html: `<h2>Your 6-Digit OTP is: <strong>${otp}</strong></h2><p>Valid for 5 minutes.</p>`
+      // });
+      console.log(`[Email Gateway] Dispatched email to ${identifier}`);
+    } catch (emailError) {
+      console.error('[Email Gateway Error]:', emailError);
+    }
+  }
+  */
+
   console.log(`======================================================\n`);
 
   res.json({
     success: true,
-    message: `OTP sent successfully to ${identifier}`,
+    message: isEmail ? `OTP sent successfully to email: ${identifier}` : `SMS OTP sent to mobile: +91 ${identifier}`,
     target: identifier,
-    demoOtp: otp // Provides in-app demo/dev toast visibility
+    expiresIn: 300,
+    demoOtp: otp // Returned for transparent testing & dev notification toast
   });
-});
+};
 
-// Verify OTP API Endpoint
-app.post('/api/verify-otp', (req, res) => {
+app.post('/api/auth/send-otp', handleSendOtp);
+app.post('/api/send-otp', handleSendOtp); // Backward compatibility alias
+
+// =============================================================================
+// 2. VERIFY OTP ROUTE (/api/auth/verify-otp & alias /api/verify-otp)
+// Verifies 6-digit OTP tied to the exact contact identifier
+// =============================================================================
+const handleVerifyOtp = (req, res) => {
   const { identifier, otp } = req.body;
   if (!identifier || !otp) {
-    return res.status(400).json({ success: false, message: 'Identifier and OTP are required!' });
+    return res.status(400).json({ success: false, message: 'Identifier and OTP code are required!' });
   }
 
   const cleanId = identifier.trim().toLowerCase();
   const record = activeOtps.get(cleanId);
 
-  // Allow master testing OTP 123456 (or legacy 1234) or verify stored OTP
+  // Master testing OTP '123456' (or legacy '1234')
   if (otp === '123456' || otp === '1234') {
     activeOtps.delete(cleanId);
-    return res.json({ success: true, message: 'OTP verified successfully!' });
+    return res.json({ 
+      success: true, 
+      message: 'OTP verified successfully!', 
+      role: record?.role || 'customer' 
+    });
   }
 
   if (!record) {
-    return res.status(400).json({ success: false, message: 'OTP expired or not requested. Please click Resend.' });
+    return res.status(400).json({ 
+      success: false, 
+      message: 'OTP expired or not requested for this contact. Please click Resend OTP.' 
+    });
   }
 
+  // 5-minute expiration verification
   if (Date.now() > record.expiresAt) {
     activeOtps.delete(cleanId);
-    return res.status(400).json({ success: false, message: 'OTP has expired! Please request a new one.' });
+    return res.status(400).json({ 
+      success: false, 
+      message: 'OTP has expired after 5 minutes! Please request a new OTP.' 
+    });
   }
 
+  // Exact OTP match check
   if (record.otp === otp.trim()) {
+    const verifiedRole = record.role || 'customer';
     activeOtps.delete(cleanId);
-    return res.json({ success: true, message: 'OTP verified successfully!' });
+    return res.json({ 
+      success: true, 
+      message: 'OTP verified successfully!', 
+      role: verifiedRole 
+    });
   } else {
-    return res.status(400).json({ success: false, message: 'Incorrect OTP. Please check the SMS/Email and try again.' });
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Incorrect 6-digit OTP code! Please check your SMS/Email notification and try again.' 
+    });
+  }
+};
+
+app.post('/api/auth/verify-otp', handleVerifyOtp);
+app.post('/api/verify-otp', handleVerifyOtp); // Backward compatibility alias
+
+// Admin PIN check route
+app.post('/api/auth/verify-admin-pin', (req, res) => {
+  const { pin } = req.body;
+  if (pin && pin.trim() === ADMIN_ACCESS_PIN) {
+    res.json({ success: true, message: 'Admin PIN authorized!' });
+  } else {
+    res.status(403).json({ success: false, message: 'Invalid Admin Access PIN!' });
   }
 });
 
-// Login API Endpoint
+// Standard Login API Endpoint
 app.post('/api/login', (req, res) => {
   const { identifier, password, role } = req.body;
   const user = users.find(u => u.identifier === identifier && u.password === password && u.role === role);
