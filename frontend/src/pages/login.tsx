@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, ShieldCheck, Lock, Eye, EyeOff, CheckCircle2, AlertCircle, Smartphone, Mail, Sparkles, KeyRound, Copy, Check } from 'lucide-react';
+import { 
+  ArrowLeft, User, ShieldCheck, Lock, Eye, EyeOff, CheckCircle2, 
+  AlertCircle, Smartphone, Mail, Sparkles, KeyRound, Loader2, Check 
+} from 'lucide-react';
 import { sendOtpApi, verifyOtpApi } from '../services/api';
 
 interface LoginProps {
@@ -11,13 +14,14 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [loginRole, setLoginRole] = useState<'customer' | 'admin'>('customer');
   const [signupRole, setSignupRole] = useState<'customer' | 'admin'>('customer');
 
+  // Login inputs
   const [loginId, setLoginId] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [adminPin, setAdminPin] = useState('9900');
   const [showAdminPin, setShowAdminPin] = useState(false);
 
-  // Signup states
+  // Signup inputs
   const [signupName, setSignupName] = useState('');
   const [signupPhone, setSignupPhone] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
@@ -27,7 +31,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
 
+  // Loading & error states
   const [loginError, setLoginError] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
 
   // OTP states (6-Digit OTP)
   const [step, setStep] = useState<'auth' | 'otp'>('auth');
@@ -38,8 +44,10 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [timer, setTimer] = useState(30);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState('');
-  const [copiedOtp, setCopiedOtp] = useState(false);
+  const [deliveryTarget, setDeliveryTarget] = useState('');
+  const [deliveryType, setDeliveryType] = useState<'email' | 'phone'>('phone');
 
+  // Countdown timer for 30s resend cooldown
   useEffect(() => {
     let interval: any;
     if (step === 'otp' && timer > 0) {
@@ -48,18 +56,55 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     return () => clearInterval(interval);
   }, [step, timer]);
 
+  // Real-time Identifier Auto-Detection
+  const detectedInputType = React.useMemo(() => {
+    const val = loginId.trim();
+    if (!val) return 'empty';
+    if (val.includes('@')) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return emailRegex.test(val) ? 'email' : 'email-typing';
+    }
+    let clean = val.replace(/[\s\-\(\)]/g, '');
+    if (clean.startsWith('+91')) clean = clean.slice(3);
+    else if (clean.startsWith('91') && clean.length === 12) clean = clean.slice(2);
+    else if (clean.startsWith('0') && clean.length === 11) clean = clean.slice(1);
+
+    if (/^[6-9]\d{9}$/.test(clean)) return 'phone-valid';
+    if (/^[6-9]\d{0,8}$/.test(clean) || /^\d{1,9}$/.test(clean)) return 'phone-typing';
+    return 'invalid';
+  }, [loginId]);
+
+  // Parse and normalize identifier
+  const parseIdentifier = (input: string) => {
+    const val = input.trim();
+    if (val.includes('@')) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (emailRegex.test(val)) {
+        return { type: 'email' as const, normalized: val.toLowerCase(), display: val.toLowerCase() };
+      }
+    }
+    let clean = val.replace(/[\s\-\(\)]/g, '');
+    if (clean.startsWith('+91')) clean = clean.slice(3);
+    else if (clean.startsWith('91') && clean.length === 12) clean = clean.slice(2);
+    else if (clean.startsWith('0') && clean.length === 11) clean = clean.slice(1);
+
+    if (/^[6-9]\d{9}$/.test(clean)) {
+      return { type: 'phone' as const, normalized: clean, display: `+91 ${clean}` };
+    }
+    return null;
+  };
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const phoneRegex = /^[0-9]{10}$/;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const cleanTarget = loginId.trim();
+    setLoginError('');
 
-    if (!phoneRegex.test(cleanTarget) && !emailRegex.test(cleanTarget)) {
-      setLoginError('✕ Please enter a valid 10-digit Phone Number or Email ID!');
+    const parsed = parseIdentifier(loginId);
+    if (!parsed) {
+      setLoginError('✕ Please enter a valid 10-digit Indian Mobile (+91) or Email Address.');
       return;
     }
 
-    // Admin Access PIN Verification
+    // Admin Access Security PIN Check
     if (loginRole === 'admin') {
       const cleanPin = adminPin.trim();
       if (!cleanPin || (cleanPin !== '9900' && cleanPin !== '1234')) {
@@ -68,20 +113,29 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       }
     }
 
-    setLoginError('');
-    triggerOtpFlow('Login');
+    triggerOtpFlow('Login', loginRole, parsed.normalized, adminPin);
   };
 
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError('');
+
     if (signupPassword !== confirmPassword) {
       alert('Passwords do not match!');
       return;
     }
-    triggerOtpFlow('Registration');
+
+    const target = signupPhone.trim() || signupEmail.trim();
+    const parsed = parseIdentifier(target);
+    if (!parsed) {
+      alert('Please enter a valid 10-digit Indian mobile number or email address!');
+      return;
+    }
+
+    triggerOtpFlow('Registration', signupRole, parsed.normalized);
   };
 
-  // Generate 6-Digit OTP tied specifically to the entered contact
+  // Trigger 6-Digit OTP Generation & Real Dispatch
   const triggerOtpFlow = async (
     type: 'Login' | 'Registration',
     overrideRole?: 'customer' | 'admin',
@@ -90,29 +144,49 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   ) => {
     const activeRole = overrideRole || loginRole;
     const pin = overridePin || adminPin;
-    const target = overrideTarget || loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
-    
-    // Generate secure 6-digit OTP
-    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    setActiveOtpCode(generatedOtp);
+    const target = overrideTarget || loginId.trim() || signupPhone.trim() || signupEmail.trim();
 
-    setAuthType(type);
-    setStep('otp');
-    setOtpDigits(['', '', '', '', '', '']);
-    setVerifyError('');
-    setTimer(30);
-    setShowBanner(true);
+    const parsed = parseIdentifier(target);
+    if (!parsed) {
+      setLoginError('✕ Please enter a valid 10-digit Indian Mobile (+91) or Email Address.');
+      return;
+    }
 
-    // Call backend OTP dispatch
+    setIsSendingOtp(true);
+    setLoginError('');
+
     try {
-      const res = await sendOtpApi(target, type, activeRole, pin);
-      if (res && res.demoOtp) {
-        setActiveOtpCode(res.demoOtp);
+      const res = await sendOtpApi(parsed.normalized, type, activeRole, pin);
+
+      if (!res.success) {
+        setLoginError(res.message || 'Failed to dispatch OTP. Please check your details.');
+        setIsSendingOtp(false);
+        return;
       }
-    } catch {}
+
+      // Success: advance to OTP view
+      setAuthType(type);
+      setStep('otp');
+      setDeliveryTarget(res.target || parsed.display);
+      setDeliveryType(res.identifierType || parsed.type);
+      setOtpDigits(['', '', '', '', '', '']);
+      setVerifyError('');
+      setTimer(res.cooldown || 30);
+
+      if (res.demoOtp) {
+        setActiveOtpCode(res.demoOtp);
+        setShowBanner(true);
+      } else {
+        setShowBanner(false);
+      }
+    } catch (err: any) {
+      setLoginError('Network error connecting to OTP gateway. Please retry.');
+    } finally {
+      setIsSendingOtp(false);
+    }
   };
 
-  // Handle 6-digit individual input changes
+  // Handle individual digit input changes (with paste support)
   const handleDigitChange = (index: number, val: string) => {
     const cleanVal = val.replace(/\D/g, '');
     const newDigits = [...otpDigits];
@@ -153,34 +227,35 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (fullEnteredOtp.length !== 6) {
-      setVerifyError('Please enter the full 6-digit OTP code.');
+      setVerifyError('Please enter the complete 6-digit OTP code.');
       return;
     }
 
     setIsVerifying(true);
     setVerifyError('');
 
-    const target = loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
-    let res: any = null;
+    const target = deliveryTarget || loginId.trim() || signupPhone.trim() || signupEmail.trim();
 
     try {
-      res = await verifyOtpApi(target, fullEnteredOtp);
-    } catch {}
+      const res = await verifyOtpApi(target, fullEnteredOtp);
 
-    setIsVerifying(false);
-
-    // Verify against backend response, active generated OTP, or master testing OTP '123456'
-    const isSuccess = (res && res.success) || fullEnteredOtp === activeOtpCode || fullEnteredOtp === '123456';
-
-    if (isSuccess) {
-      try {
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('userPhone', target);
-        localStorage.setItem('userRole', loginRole);
-      } catch {}
-      onLoginSuccess(loginRole);
-    } else {
-      setVerifyError(res?.message || 'Incorrect 6-digit OTP. Please check your SMS/Email notification and try again.');
+      if (res.success) {
+        try {
+          localStorage.setItem('isAuthenticated', 'true');
+          localStorage.setItem('userPhone', target);
+          localStorage.setItem('userRole', loginRole);
+          if (res.token) {
+            localStorage.setItem('authToken', res.token);
+          }
+        } catch {}
+        onLoginSuccess(loginRole);
+      } else {
+        setVerifyError(res.message || 'Incorrect 6-digit OTP. Please check and try again.');
+      }
+    } catch {
+      setVerifyError('Network error during verification. Please try again.');
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -190,10 +265,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setVerifyError('');
   };
 
-  const targetIdentifier = loginId.trim() || signupPhone.trim() || signupEmail.trim() || '9078699528';
-  const isEmailTarget = targetIdentifier.includes('@');
-  const formattedTarget = isEmailTarget ? targetIdentifier : `+91 ${targetIdentifier}`;
-
+  // ---------------------------------------------------------------------------
+  // RENDER: STEP 2 - OTP VERIFICATION CARD
+  // ---------------------------------------------------------------------------
   if (step === 'otp') {
     return (
       <div 
@@ -204,27 +278,27 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
         <div className="w-full max-w-md relative z-10 space-y-3">
           
-          {/* IN-APP DEMO / DEV OTP NOTIFICATION TOAST */}
-          {showBanner && (
+          {/* IN-APP DEV NOTIFICATION TOAST (Visible in dev/test mode) */}
+          {showBanner && activeOtpCode && (
             <div className="bg-amber-500 text-gray-950 p-4 rounded-3xl shadow-2xl border-2 border-amber-300 flex items-start justify-between gap-3 animate-bounce-once">
               <div className="flex items-start space-x-3">
                 <div className="w-8 h-8 rounded-xl bg-black text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
-                  <Smartphone className="w-4 h-4" />
+                  {deliveryType === 'email' ? <Mail className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />}
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center space-x-1.5">
                     <span className="text-[10px] font-black uppercase tracking-wider bg-black/20 px-2 py-0.5 rounded-md">
-                      Sahoo SMS Gateway
+                      {deliveryType === 'email' ? 'Email Gateway (Nodemailer)' : 'SMS Gateway (Fast2SMS)'}
                     </span>
                     <span className="text-[10px] font-bold">Just now</span>
                   </div>
                   <p className="text-xs font-black">
-                    Your Sahoo Sweets 6-Digit OTP is:{' '}
+                    Your 6-Digit OTP is:{' '}
                     <span className="bg-black text-amber-300 px-2.5 py-0.5 rounded-lg font-mono text-sm tracking-widest font-black inline-block ml-1 shadow-sm">
-                      {activeOtpCode || '123456'}
+                      {activeOtpCode}
                     </span>
                   </p>
-                  <p className="text-[10px] text-gray-900 font-semibold">Sent to: {formattedTarget} (Valid for 5 mins)</p>
+                  <p className="text-[10px] text-gray-900 font-semibold">Sent to: {deliveryTarget} (Valid for 5 mins)</p>
                 </div>
               </div>
 
@@ -241,8 +315,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           {/* OTP VERIFICATION CARD */}
           <div className="bg-white/95 backdrop-blur-xl border rounded-3xl p-6 sm:p-8 shadow-2xl text-center" style={{ borderColor: '#BBAB47' }}>
             <div className="flex items-center justify-between mb-5">
-              <button type="button" onClick={() => setStep('auth')} className="inline-flex items-center text-xs font-bold text-gray-700 hover:text-black cursor-pointer">
-                <ArrowLeft className="w-4 h-4 mr-1" /> Change {isEmailTarget ? 'Email' : 'Number'}
+              <button 
+                type="button" 
+                onClick={() => setStep('auth')} 
+                className="inline-flex items-center text-xs font-bold text-gray-700 hover:text-black cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4 mr-1" /> Change {deliveryType === 'email' ? 'Email' : 'Number'}
               </button>
               <span className="px-2.5 py-1 rounded-lg text-[10px] uppercase font-black tracking-wider text-black" style={{ backgroundColor: '#c2b767' }}>
                 {loginRole === 'admin' ? 'ADMIN VERIFICATION' : 'CUSTOMER LOGIN'}
@@ -260,11 +338,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             {/* Target Contact Display */}
             <div className="mt-1.5 space-y-1">
               <p className="text-xs text-gray-600 font-medium">
-                {isEmailTarget ? 'OTP sent to your email address:' : 'OTP sent via SMS to mobile number:'}
+                {deliveryType === 'email' ? 'OTP sent to your email address:' : 'OTP sent via SMS to mobile number:'}
               </p>
               <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl border bg-amber-50/50" style={{ borderColor: '#BBAB47' }}>
-                {isEmailTarget ? <Mail className="w-3.5 h-3.5 text-amber-800 shrink-0" /> : <Smartphone className="w-3.5 h-3.5 text-amber-800 shrink-0" />}
-                <span className="text-xs font-black text-gray-900">{formattedTarget}</span>
+                {deliveryType === 'email' ? <Mail className="w-3.5 h-3.5 text-amber-800 shrink-0" /> : <Smartphone className="w-3.5 h-3.5 text-amber-800 shrink-0" />}
+                <span className="text-xs font-black text-gray-900">{deliveryTarget}</span>
               </div>
             </div>
 
@@ -294,16 +372,16 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 ))}
               </div>
 
-              {/* Timer and Resend */}
+              {/* Timer and Resend Cooldown */}
               <div className="flex items-center justify-between text-xs px-2 pt-1 text-gray-600 font-semibold">
                 <span>{timer > 0 ? `Resend OTP in ${timer}s` : "Didn't receive OTP?"}</span>
                 <button 
                   type="button" 
-                  disabled={timer > 0} 
+                  disabled={timer > 0 || isSendingOtp} 
                   onClick={() => triggerOtpFlow(authType)}
-                  className={`font-black ${timer > 0 ? 'opacity-40 cursor-not-allowed' : 'text-orange-600 hover:underline cursor-pointer'}`}
+                  className={`font-black ${timer > 0 || isSendingOtp ? 'opacity-40 cursor-not-allowed' : 'text-orange-600 hover:underline cursor-pointer'}`}
                 >
-                  Resend OTP
+                  {isSendingOtp ? 'Sending...' : 'Resend OTP'}
                 </button>
               </div>
 
@@ -314,7 +392,10 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 style={{ backgroundColor: '#c2b767' }}
               >
                 {isVerifying ? (
-                  <span>Verifying Code...</span>
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Verifying Code...</span>
+                  </>
                 ) : (
                   <span>VERIFY OTP & ENTER SAHOO SWEETS ➔</span>
                 )}
@@ -327,6 +408,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // RENDER: STEP 1 - LOGIN / REGISTRATION WITH AUTO-DETECTION
+  // ---------------------------------------------------------------------------
   return (
     <div 
       className="min-h-screen flex items-center justify-center p-4 relative font-sans bg-cover bg-center"
@@ -380,7 +464,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
             <div className="text-center mb-4">
               <h2 className="text-2xl font-black text-gray-900">Sign In with OTP</h2>
-              <p className="text-xs font-semibold mt-0.5 text-gray-600">Enter your Phone or Email to get 6-digit code</p>
+              <p className="text-xs font-semibold mt-0.5 text-gray-600">Enter Indian Phone (+91) or Email Address</p>
             </div>
 
             {/* ROLE SELECTOR TABS */}
@@ -405,21 +489,47 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             </div>
 
             <form onSubmit={handleLoginSubmit} className="space-y-3.5">
+              
+              {/* AUTO-DETECTION INPUT FIELD */}
               <div>
-                <label className="block text-xs font-black text-gray-800 uppercase mb-1">
-                  {loginRole === 'admin' ? 'Admin Phone / Email' : 'Phone Number or Email Address'}
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-black text-gray-800 uppercase">
+                    {loginRole === 'admin' ? 'Admin Phone / Email' : 'Phone (+91) or Email Address'}
+                  </label>
+
+                  {/* Real-time Detection Badge */}
+                  {detectedInputType === 'email' && (
+                    <span className="inline-flex items-center text-[10px] font-black text-blue-800 bg-blue-100 px-2 py-0.5 rounded-md animate-fadeIn">
+                      <Mail className="w-3 h-3 mr-1" /> Email Detected
+                    </span>
+                  )}
+                  {detectedInputType === 'phone-valid' && (
+                    <span className="inline-flex items-center text-[10px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md animate-fadeIn">
+                      <Smartphone className="w-3 h-3 mr-1" /> +91 Mobile Detected
+                    </span>
+                  )}
+                </div>
+
                 <div className="relative flex items-center">
                   <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-500">
-                    <User className="w-4 h-4" />
+                    {detectedInputType.startsWith('email') ? (
+                      <Mail className="w-4 h-4 text-amber-700" />
+                    ) : detectedInputType.startsWith('phone') ? (
+                      <Smartphone className="w-4 h-4 text-amber-700" />
+                    ) : (
+                      <User className="w-4 h-4" />
+                    )}
                   </span>
                   <input 
                     type="text" 
                     value={loginId}
-                    onChange={(e) => setLoginId(e.target.value)}
+                    onChange={(e) => {
+                      setLoginId(e.target.value);
+                      if (loginError) setLoginError('');
+                    }}
                     required 
                     placeholder={loginRole === 'admin' ? "9078699528 or admin@sahoosweets.com" : "e.g. 9876543210 or user@gmail.com"} 
-                    className="w-full pl-10 pr-4 py-2.5 border rounded-xl text-xs font-black text-black placeholder-gray-500 focus:bg-white focus:outline-none"
+                    className="w-full pl-10 pr-4 py-2.5 border rounded-xl text-xs font-black text-black placeholder-gray-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
                     style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}
                   />
                 </div>
@@ -466,7 +576,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <div className="relative flex items-center">
                   <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-500"><Lock className="w-4 h-4" /></span>
                   <input 
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? 'text' : 'password'} 
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     required 
@@ -480,8 +590,20 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 </div>
               </div>
 
-              <button type="submit" className="w-full py-3.5 text-black font-black text-xs sm:text-sm rounded-xl shadow-lg transition cursor-pointer flex items-center justify-center space-x-2" style={{ backgroundColor: '#c2b767' }}>
-                <span>SEND 6-DIGIT OTP TO CONTACT ➔</span>
+              <button 
+                type="submit" 
+                disabled={isSendingOtp}
+                className="w-full py-3.5 text-black font-black text-xs sm:text-sm rounded-xl shadow-lg transition cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50" 
+                style={{ backgroundColor: '#c2b767' }}
+              >
+                {isSendingOtp ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>SENDING 6-DIGIT OTP...</span>
+                  </>
+                ) : (
+                  <span>SEND 6-DIGIT OTP TO CONTACT ➔</span>
+                )}
               </button>
             </form>
 
@@ -508,7 +630,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <input type="text" value={signupName} onChange={e => setSignupName(e.target.value)} required placeholder="Krushna Chandra Sahoo" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-black uppercase">Phone Number *</label>
+                <label className="block text-[10px] font-black text-black uppercase">Phone Number (+91) *</label>
                 <input type="tel" maxLength={10} value={signupPhone} onChange={e => setSignupPhone(e.target.value)} required placeholder="9078699528" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
               </div>
               <div>
@@ -540,8 +662,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <input type="checkbox" checked={termsAccepted} onChange={e => setTermsAccepted(e.target.checked)} required className="h-3.5 w-3.5 rounded cursor-pointer text-black" />
                 <label className="ml-2 text-[10px] font-bold text-black">I agree to Terms & Conditions</label>
               </div>
-              <button type="submit" className="w-full py-2.5 text-black font-black text-xs rounded-xl shadow cursor-pointer" style={{ backgroundColor: '#c2b767' }}>
-                REGISTER & SEND 6-DIGIT OTP
+              <button 
+                type="submit" 
+                disabled={isSendingOtp}
+                className="w-full py-2.5 text-black font-black text-xs rounded-xl shadow cursor-pointer disabled:opacity-50" 
+                style={{ backgroundColor: '#c2b767' }}
+              >
+                {isSendingOtp ? 'SENDING 6-DIGIT OTP...' : 'REGISTER & SEND 6-DIGIT OTP'}
               </button>
             </form>
 

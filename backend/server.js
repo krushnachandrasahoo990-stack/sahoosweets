@@ -1,8 +1,19 @@
-// --- Sahoo Sweets Backend Server (Express) ---
+// =============================================================================
+// SAHOO SWEETS - PRODUCTION BACKEND SERVER (Express + Node.js)
+// =============================================================================
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const app = express();
+const crypto = require('crypto');
 
+let nodemailer = null;
+try {
+  nodemailer = require('nodemailer');
+} catch (e) {
+  console.warn('[Server] nodemailer not loaded, fallback mode active.');
+}
+
+const app = express();
 app.use(cors());
 app.use(express.json());
 
@@ -12,168 +23,454 @@ const users = [
   { identifier: '9876543210', password: 'password123', role: 'customer', name: 'Customer' }
 ];
 
-// In-memory OTP storage with timestamps: Map<identifier, { otp: string, expiresAt: number, role?: string }>
+// Active OTP Memory Store:
+// Map<normalizedIdentifier, { otp: string, expiresAt: number, attempts: number, lastSentAt: number, role: string, type: string }>
 const activeOtps = new Map();
 
+// Rate Limiting Map: Map<normalizedIdentifier, number[]> (timestamps of recent requests)
+const otpRateLimits = new Map();
+
 // Authorized Admin Security PIN
-const ADMIN_ACCESS_PIN = '9900';
+const ADMIN_ACCESS_PIN = process.env.ADMIN_ACCESS_PIN || '9900';
 
 // =============================================================================
-// 1. SEND OTP ROUTE (/api/auth/send-otp & alias /api/send-otp)
-// Generates a 6-digit OTP tied specifically to the entered phone or email
-// Valid for exactly 5 minutes (5 * 60 * 1000 ms)
+// HELPER FUNCTIONS: NORMALIZATION & VALIDATION
+// =============================================================================
+
+/**
+ * Normalizes and validates whether input is an Indian Mobile or Email.
+ * Returns { type: 'phone'|'email'|null, normalized: string, display: string }
+ */
+function parseAndValidateIdentifier(input) {
+  if (!input || typeof input !== 'string') return null;
+  const trimmed = input.trim();
+
+  // Email pattern check
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (emailRegex.test(trimmed)) {
+    return {
+      type: 'email',
+      normalized: trimmed.toLowerCase(),
+      display: trimmed.toLowerCase()
+    };
+  }
+
+  // Indian Phone pattern check: Strip spaces, dashes, +91, leading 0
+  let cleanPhone = trimmed.replace(/[\s\-\(\)]/g, '');
+  if (cleanPhone.startsWith('+91')) {
+    cleanPhone = cleanPhone.slice(3);
+  } else if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
+    cleanPhone = cleanPhone.slice(2);
+  } else if (cleanPhone.startsWith('0') && cleanPhone.length === 11) {
+    cleanPhone = cleanPhone.slice(1);
+  }
+
+  // 10-digit Indian Mobile check (starts with 6, 7, 8, or 9)
+  const phoneRegex = /^[6-9]\d{9}$/;
+  if (phoneRegex.test(cleanPhone)) {
+    return {
+      type: 'phone',
+      normalized: cleanPhone,
+      display: `+91 ${cleanPhone}`
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Rate limit check: Maximum 5 OTP requests in 10 minutes per identifier
+ */
+function isRateLimited(identifier) {
+  const now = Date.now();
+  const windowMs = 10 * 60 * 1000;
+  const maxRequests = 5;
+
+  const timestamps = (otpRateLimits.get(identifier) || []).filter(ts => now - ts < windowMs);
+  if (timestamps.length >= maxRequests) {
+    return true;
+  }
+  timestamps.push(now);
+  otpRateLimits.set(identifier, timestamps);
+  return false;
+}
+
+// =============================================================================
+// REAL DELIVERY DISPATCHERS (EMAIL & INDIAN SMS)
+// =============================================================================
+
+/**
+ * Sends Email OTP via Nodemailer SMTP or Resend API
+ */
+async function sendEmailOtp(email, otp, type = 'Login') {
+  const subject = `Your Sahoo Sweets Verification Code: ${otp}`;
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Sahoo Sweets Verification Code</title>
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8f6f0; margin: 0; padding: 24px;">
+      <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border: 2px solid #BBAB47; border-radius: 18px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+        <div style="text-align: center; border-bottom: 2px dashed #f2c983; padding-bottom: 18px; margin-bottom: 24px;">
+          <h1 style="color: #1a1a1a; margin: 0; font-size: 24px; font-weight: 900; letter-spacing: 1px;">SAHOO SWEETS PURI</h1>
+          <p style="color: #8c7625; margin: 4px 0 0; font-size: 13px; font-weight: 700;">Traditional Sweets & Snacks Delivery</p>
+        </div>
+
+        <p style="font-size: 15px; color: #333333; line-height: 1.5; margin-bottom: 16px;">
+          Hello,
+        </p>
+        <p style="font-size: 14px; color: #555555; line-height: 1.5; margin-bottom: 20px;">
+          Use the following 6-digit One Time Password (OTP) to complete your <strong>${type}</strong> verification. This code is valid for <strong>5 minutes</strong>.
+        </p>
+
+        <div style="background-color: #fcf9eb; border: 2px solid #BBAB47; border-radius: 14px; padding: 20px; text-align: center; margin-bottom: 24px;">
+          <span style="font-size: 32px; font-weight: 900; letter-spacing: 8px; color: #1a1a1a; font-family: monospace;">
+            ${otp}
+          </span>
+        </div>
+
+        <p style="font-size: 12px; color: #777777; margin-bottom: 8px;">
+          <strong>Security Notice:</strong> Never share this OTP with anyone, including Sahoo Sweets staff. Our team will never ask for your code.
+        </p>
+        <p style="font-size: 12px; color: #999999; margin: 0; border-top: 1px solid #eeeeee; padding-top: 16px; text-align: center;">
+          Grand Road, Puri, Odisha • Delivery Helpline: +91 9078699528
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Option 1: Resend API (HTTP API)
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM || 'Sahoo Sweets <onboarding@resend.dev>',
+          to: email,
+          subject,
+          html: htmlContent
+        })
+      });
+      const data = await res.json();
+      console.log(`[Email Gateway - Resend] Sent to ${email}. ID:`, data.id || 'ok');
+      return { success: true, provider: 'resend', id: data.id };
+    } catch (err) {
+      console.error('[Email Gateway Error - Resend]:', err);
+    }
+  }
+
+  // Option 2: Nodemailer (SMTP / Gmail App Password)
+  if (nodemailer && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    try {
+      const transporter = nodemailer.createTransport({
+        service: process.env.EMAIL_SERVICE || 'gmail',
+        host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+        port: Number(process.env.EMAIL_PORT) || 587,
+        secure: process.env.EMAIL_SECURE === 'true',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        }
+      });
+
+      const info = await transporter.sendMail({
+        from: process.env.EMAIL_FROM || `"Sahoo Sweets" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject,
+        html: htmlContent
+      });
+
+      console.log(`[Email Gateway - Nodemailer] Sent to ${email}. MessageId:`, info.messageId);
+      return { success: true, provider: 'nodemailer', id: info.messageId };
+    } catch (err) {
+      console.error('[Email Gateway Error - Nodemailer]:', err);
+    }
+  }
+
+  // Option 3: Development / Fallback Console Logging
+  console.log(`\n======================================================`);
+  console.log(`📧 [EMAIL OTP SIMULATOR - DEV MODE]`);
+  console.log(`To:       ${email}`);
+  console.log(`Subject:  ${subject}`);
+  console.log(`OTP Code: ${otp}`);
+  console.log(`Validity: 5 Minutes`);
+  console.log(`Note:     Configure EMAIL_USER / EMAIL_PASS or RESEND_API_KEY in .env for live email`);
+  console.log(`======================================================\n`);
+  return { success: true, provider: 'dev-console', simulated: true };
+}
+
+/**
+ * Sends Phone OTP to Indian Mobile via Fast2SMS / MSG91 API
+ */
+async function sendSmsOtp(phoneNumber, otp) {
+  const smsApiKey = process.env.FAST2SMS_API_KEY || process.env.SMS_API_KEY;
+
+  // Option 1: Fast2SMS (Indian SMS Gateway)
+  if (smsApiKey) {
+    try {
+      const response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+        method: 'POST',
+        headers: {
+          'authorization': smsApiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          route: 'otp',
+          variables_values: otp,
+          numbers: phoneNumber
+        })
+      });
+      const data = await response.json();
+      console.log(`[SMS Gateway - Fast2SMS] Dispatched to +91 ${phoneNumber}:`, data);
+      return { success: true, provider: 'fast2sms', data };
+    } catch (err) {
+      console.error('[SMS Gateway Error - Fast2SMS]:', err);
+    }
+  }
+
+  // Option 2: MSG91 Gateway (Optional Alternative)
+  if (process.env.MSG91_AUTH_KEY) {
+    try {
+      const templateId = process.env.MSG91_TEMPLATE_ID;
+      const url = `https://control.msg91.com/api/v5/otp?template_id=${templateId}&mobile=91${phoneNumber}&authkey=${process.env.MSG91_AUTH_KEY}&otp=${otp}`;
+      const response = await fetch(url, { method: 'POST' });
+      const data = await response.json();
+      console.log(`[SMS Gateway - MSG91] Dispatched to +91 ${phoneNumber}:`, data);
+      return { success: true, provider: 'msg91', data };
+    } catch (err) {
+      console.error('[SMS Gateway Error - MSG91]:', err);
+    }
+  }
+
+  // Option 3: Development / Fallback Console Logging
+  console.log(`\n======================================================`);
+  console.log(`📱 [INDIAN SMS OTP SIMULATOR - DEV MODE]`);
+  console.log(`Recipient: +91 ${phoneNumber}`);
+  console.log(`Message:   Your Sahoo Sweets verification code is ${otp}. Valid for 5 minutes.`);
+  console.log(`OTP Code:  ${otp}`);
+  console.log(`Note:      Configure FAST2SMS_API_KEY in .env for live SMS delivery`);
+  console.log(`======================================================\n`);
+  return { success: true, provider: 'dev-console', simulated: true };
+}
+
+// =============================================================================
+// ROUTE: 1. SEND OTP (/api/auth/send-otp & alias /api/send-otp)
 // =============================================================================
 const handleSendOtp = async (req, res) => {
-  const { identifier, type, role, adminPin } = req.body;
-  if (!identifier) {
-    return res.status(400).json({ success: false, message: 'Phone number or Email ID is required!' });
-  }
+  try {
+    const { identifier, type, role, adminPin } = req.body;
 
-  const cleanId = identifier.trim().toLowerCase();
-  const isEmail = cleanId.includes('@');
-
-  // Admin PIN verification if requesting OTP as Admin
-  if (role === 'admin') {
-    if (!adminPin || adminPin.trim() !== ADMIN_ACCESS_PIN) {
-      return res.status(403).json({ 
+    if (!identifier) {
+      return res.status(400).json({ 
         success: false, 
-        message: 'Invalid Admin Access PIN! Authorized owner PIN required (Default PIN: 9900).' 
+        message: 'Please enter a valid Email Address or 10-digit Indian Mobile Number!' 
       });
     }
-  }
 
-  // Generate secure 6-digit numeric OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = Date.now() + 5 * 60 * 1000; // 5-minute validity window
-  
-  // Store in in-memory session cache tied strictly to cleanId
-  activeOtps.set(cleanId, { otp, expiresAt, role: role || 'customer' });
-
-  console.log(`\n======================================================`);
-  console.log(`📨 [SAHOO SWEETS OTP DISPATCH GATEWAY]`);
-  console.log(`Target Contact: ${identifier}`);
-  console.log(`Target Type:    ${isEmail ? 'EMAIL ADDRESS' : 'SMS / MOBILE'}`);
-  console.log(`Auth Type:      ${type || 'Login'}`);
-  console.log(`Requested Role: ${role || 'customer'}`);
-  console.log(`Generated OTP:  ${otp} (6 Digits)`);
-  console.log(`Valid for:      5 Minutes (Expires at: ${new Date(expiresAt).toLocaleTimeString()})`);
-
-  // -------------------------------------------------------------
-  // SMS PROVIDER INTEGRATION PLACEHOLDER (Twilio / MSG91 / Fast2SMS)
-  // Plug in production SMS gateway here:
-  // -------------------------------------------------------------
-  /*
-  if (!isEmail) {
-    try {
-      // Example Twilio integration:
-      // const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
-      // await twilio.messages.create({
-      //   body: `Your Sahoo Sweets verification code is ${otp}. Valid for 5 minutes. Do not share this OTP.`,
-      //   from: process.env.TWILIO_PHONE_NUMBER,
-      //   to: identifier.startsWith('+') ? identifier : `+91${identifier}`
-      // });
-      console.log(`[SMS Gateway] Dispatched SMS to ${identifier}`);
-    } catch (smsError) {
-      console.error('[SMS Gateway Error]:', smsError);
+    // Auto-detection & Validation
+    const parsed = parseAndValidateIdentifier(identifier);
+    if (!parsed) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid input. Please enter a valid 10-digit Indian Mobile Number (+91) or Email Address.' 
+      });
     }
-  }
-  */
 
-  // -------------------------------------------------------------
-  // EMAIL PROVIDER INTEGRATION PLACEHOLDER (Nodemailer / Resend / SendGrid)
-  // Plug in production email gateway here:
-  // -------------------------------------------------------------
-  /*
-  if (isEmail) {
-    try {
-      // Example Nodemailer integration:
-      // const nodemailer = require('nodemailer');
-      // const transporter = nodemailer.createTransport({ ... });
-      // await transporter.sendMail({
-      //   from: '"Sahoo Sweets" <no-reply@sahoosweets.com>',
-      //   to: identifier,
-      //   subject: 'Your Sahoo Sweets Verification Code',
-      //   html: `<h2>Your 6-Digit OTP is: <strong>${otp}</strong></h2><p>Valid for 5 minutes.</p>`
-      // });
-      console.log(`[Email Gateway] Dispatched email to ${identifier}`);
-    } catch (emailError) {
-      console.error('[Email Gateway Error]:', emailError);
+    const { type: identifierType, normalized, display } = parsed;
+
+    // Admin Access Security Check
+    if (role === 'admin') {
+      if (!adminPin || adminPin.trim() !== ADMIN_ACCESS_PIN) {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Invalid Admin Access PIN! Authorized owner PIN required (Default PIN: 9900).' 
+        });
+      }
     }
+
+    // Rate Limiting Check (Max 5 requests in 10 minutes)
+    if (isRateLimited(normalized)) {
+      return res.status(429).json({
+        success: false,
+        message: 'Rate limit exceeded. Too many OTP requests. Please try again after 10 minutes.'
+      });
+    }
+
+    // 30-Second Cooldown Check
+    const existing = activeOtps.get(normalized);
+    const now = Date.now();
+    if (existing && existing.lastSentAt && (now - existing.lastSentAt < 30000)) {
+      const remainingSecs = Math.ceil((30000 - (now - existing.lastSentAt)) / 1000);
+      return res.status(429).json({
+        success: false,
+        message: `Please wait ${remainingSecs}s before requesting a new OTP code.`,
+        cooldown: remainingSecs
+      });
+    }
+
+    // Invalidate previous OTP and generate a secure 6-digit numeric code
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const expiresAt = now + 5 * 60 * 1000; // 5-minute expiry
+
+    // Store in activeOtps map
+    activeOtps.set(normalized, {
+      otp,
+      expiresAt,
+      attempts: 0,
+      lastSentAt: now,
+      role: role || 'customer',
+      type: type || 'Login'
+    });
+
+    // Real Delivery Trigger (Email vs Indian SMS)
+    let deliveryResult;
+    if (identifierType === 'email') {
+      deliveryResult = await sendEmailOtp(normalized, otp, type);
+    } else {
+      deliveryResult = await sendSmsOtp(normalized, otp);
+    }
+
+    const isDev = process.env.NODE_ENV !== 'production';
+
+    return res.status(200).json({
+      success: true,
+      message: identifierType === 'email'
+        ? `OTP code sent successfully to email: ${display}`
+        : `OTP code sent via SMS to mobile: ${display}`,
+      target: display,
+      identifierType,
+      expiresIn: 300,
+      cooldown: 30,
+      provider: deliveryResult?.provider || 'default',
+      // In development mode, provide demoOtp for easy UI testing/auto-fill banner
+      demoOtp: isDev ? otp : undefined
+    });
+  } catch (error) {
+    console.error('[Send OTP Server Error]:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to dispatch OTP. Please check your network and try again.'
+    });
   }
-  */
-
-  console.log(`======================================================\n`);
-
-  res.json({
-    success: true,
-    message: isEmail ? `OTP sent successfully to email: ${identifier}` : `SMS OTP sent to mobile: +91 ${identifier}`,
-    target: identifier,
-    expiresIn: 300,
-    demoOtp: otp // Returned for transparent testing & dev notification toast
-  });
 };
 
 app.post('/api/auth/send-otp', handleSendOtp);
-app.post('/api/send-otp', handleSendOtp); // Backward compatibility alias
+app.post('/api/send-otp', handleSendOtp);
 
 // =============================================================================
-// 2. VERIFY OTP ROUTE (/api/auth/verify-otp & alias /api/verify-otp)
-// Verifies 6-digit OTP tied to the exact contact identifier
+// ROUTE: 2. VERIFY OTP (/api/auth/verify-otp & alias /api/verify-otp)
 // =============================================================================
 const handleVerifyOtp = (req, res) => {
-  const { identifier, otp } = req.body;
-  if (!identifier || !otp) {
-    return res.status(400).json({ success: false, message: 'Identifier and OTP code are required!' });
-  }
+  try {
+    const { identifier, otp } = req.body;
 
-  const cleanId = identifier.trim().toLowerCase();
-  const record = activeOtps.get(cleanId);
+    if (!identifier || !otp) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Identifier and 6-digit OTP code are required!' 
+      });
+    }
 
-  // Master testing OTP '123456' (or legacy '1234')
-  if (otp === '123456' || otp === '1234') {
-    activeOtps.delete(cleanId);
-    return res.json({ 
-      success: true, 
-      message: 'OTP verified successfully!', 
-      role: record?.role || 'customer' 
-    });
-  }
+    const parsed = parseAndValidateIdentifier(identifier);
+    if (!parsed) {
+      return res.status(400).json({ success: false, message: 'Invalid phone number or email address format.' });
+    }
 
-  if (!record) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'OTP expired or not requested for this contact. Please click Resend OTP.' 
-    });
-  }
+    const { normalized, display } = parsed;
+    const cleanOtp = String(otp).trim();
 
-  // 5-minute expiration verification
-  if (Date.now() > record.expiresAt) {
-    activeOtps.delete(cleanId);
-    return res.status(400).json({ 
-      success: false, 
-      message: 'OTP has expired after 5 minutes! Please request a new OTP.' 
-    });
-  }
+    // Master test bypass code in non-production
+    const isDev = process.env.NODE_ENV !== 'production';
+    if (isDev && (cleanOtp === '123456' || cleanOtp === '1234')) {
+      const record = activeOtps.get(normalized);
+      const verifiedRole = record?.role || 'customer';
+      activeOtps.delete(normalized);
 
-  // Exact OTP match check
-  if (record.otp === otp.trim()) {
+      const token = `ss_session_${Buffer.from(`${normalized}:${Date.now()}`).toString('base64')}`;
+      return res.status(200).json({
+        success: true,
+        message: 'OTP verified successfully (Development Master Code)!',
+        token,
+        user: {
+          identifier: display,
+          role: verifiedRole,
+          name: verifiedRole === 'admin' ? 'Sahoo Sweets Admin' : 'Sahoo Customer'
+        }
+      });
+    }
+
+    const record = activeOtps.get(normalized);
+
+    // Check if record exists
+    if (!record) {
+      return res.status(400).json({
+        success: false,
+        message: 'OTP expired or not requested for this contact. Please click "Resend OTP".'
+      });
+    }
+
+    // Check 5-minute validity window
+    if (Date.now() > record.expiresAt) {
+      activeOtps.delete(normalized);
+      return res.status(400).json({
+        success: false,
+        message: 'OTP has expired after 5 minutes! Please request a new OTP.'
+      });
+    }
+
+    // Attempt Limit Check (Max 3 wrong attempts)
+    if (record.otp !== cleanOtp) {
+      record.attempts = (record.attempts || 0) + 1;
+
+      if (record.attempts >= 3) {
+        activeOtps.delete(normalized);
+        return res.status(400).json({
+          success: false,
+          message: 'Too many incorrect attempts (3/3). This OTP has been invalidated for security. Please request a new OTP.'
+        });
+      }
+
+      const attemptsLeft = 3 - record.attempts;
+      return res.status(400).json({
+        success: false,
+        message: `Incorrect 6-digit OTP. You have ${attemptsLeft} attempt${attemptsLeft > 1 ? 's' : ''} remaining.`
+      });
+    }
+
+    // OTP Verified Successfully!
     const verifiedRole = record.role || 'customer';
-    activeOtps.delete(cleanId);
-    return res.json({ 
-      success: true, 
-      message: 'OTP verified successfully!', 
-      role: verifiedRole 
+    activeOtps.delete(normalized);
+
+    const token = `ss_session_${Buffer.from(`${normalized}:${Date.now()}`).toString('base64')}`;
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully!',
+      token,
+      user: {
+        identifier: display,
+        role: verifiedRole,
+        name: verifiedRole === 'admin' ? 'Sahoo Sweets Admin' : 'Sahoo Customer'
+      }
     });
-  } else {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Incorrect 6-digit OTP code! Please check your SMS/Email notification and try again.' 
+  } catch (error) {
+    console.error('[Verify OTP Server Error]:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Verification failed due to a server error. Please try again.'
     });
   }
 };
 
 app.post('/api/auth/verify-otp', handleVerifyOtp);
-app.post('/api/verify-otp', handleVerifyOtp); // Backward compatibility alias
+app.post('/api/verify-otp', handleVerifyOtp);
 
 // Admin PIN check route
 app.post('/api/auth/verify-admin-pin', (req, res) => {
@@ -246,5 +543,9 @@ app.get('/api/menu', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`\n======================================================`);
+  console.log(`🚀 Sahoo Sweets Backend Server running on port ${PORT}`);
+  console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔐 Admin PIN:    ${ADMIN_ACCESS_PIN}`);
+  console.log(`======================================================\n`);
 });
