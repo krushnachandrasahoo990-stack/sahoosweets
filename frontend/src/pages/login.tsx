@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  ArrowLeft, User, ShieldCheck, Lock, Eye, EyeOff, CheckCircle2, 
-  AlertCircle, Smartphone, Mail, Sparkles, KeyRound, Loader2 
+  ArrowLeft, User, ShieldCheck, Lock, Eye, EyeOff, 
+  AlertCircle, Smartphone, Mail, Sparkles, KeyRound, Loader2, CheckCircle2 
 } from 'lucide-react';
 import { sendOtpApi, verifyOtpApi } from '../services/api';
 
@@ -39,15 +39,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [step, setStep] = useState<'auth' | 'otp'>('auth');
   const [authType, setAuthType] = useState<'Login' | 'Registration'>('Login');
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
-  const [activeOtpCode, setActiveOtpCode] = useState<string>('');
-  const [showBanner, setShowBanner] = useState(false);
-  const [timer, setTimer] = useState(30);
+  const [timer, setTimer] = useState(60); // 60s cooldown
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState('');
   const [deliveryTarget, setDeliveryTarget] = useState('');
   const [deliveryType, setDeliveryType] = useState<'email' | 'phone'>('phone');
 
-  // Countdown timer for 30s resend cooldown
+  // Countdown timer for 60s resend cooldown
   useEffect(() => {
     let interval: any;
     if (step === 'otp' && timer > 0) {
@@ -171,14 +169,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       setDeliveryType(res.identifierType || parsed.type);
       setOtpDigits(['', '', '', '', '', '']);
       setVerifyError('');
-      setTimer(res.cooldown || 30);
-
-      if (res.demoOtp) {
-        setActiveOtpCode(res.demoOtp);
-        setShowBanner(true);
-      } else {
-        setShowBanner(false);
-      }
+      setTimer(res.cooldown || 60);
     } catch {
       setLoginError('Network error connecting to OTP gateway. Please retry.');
     } finally {
@@ -259,14 +250,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     }
   };
 
-  const fillDemoOtp = () => {
-    const code = activeOtpCode || '123456';
-    setOtpDigits(code.split(''));
-    setVerifyError('');
-  };
-
   // ---------------------------------------------------------------------------
-  // STEP 2: OTP VERIFICATION VIEW
+  // STEP 2: OTP VERIFICATION VIEW (ZERO SCREEN EXPOSURE)
   // ---------------------------------------------------------------------------
   if (step === 'otp') {
     return (
@@ -277,41 +262,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
 
         <div className="w-full max-w-md relative z-10 space-y-3">
-          
-          {/* IN-APP DEV NOTIFICATION TOAST (Visible in dev/test mode) */}
-          {showBanner && activeOtpCode && (
-            <div className="bg-amber-500 text-gray-950 p-4 rounded-3xl shadow-2xl border-2 border-amber-300 flex items-start justify-between gap-3 animate-bounce-once">
-              <div className="flex items-start space-x-3">
-                <div className="w-8 h-8 rounded-xl bg-black text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
-                  {deliveryType === 'email' ? <Mail className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />}
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-[10px] font-black uppercase tracking-wider bg-black/20 px-2 py-0.5 rounded-md">
-                      {deliveryType === 'email' ? 'Email Gateway (Nodemailer)' : 'SMS Gateway (Fast2SMS)'}
-                    </span>
-                    <span className="text-[10px] font-bold">Just now</span>
-                  </div>
-                  <p className="text-xs font-black">
-                    Your 6-Digit OTP is:{' '}
-                    <span className="bg-black text-amber-300 px-2.5 py-0.5 rounded-lg font-mono text-sm tracking-widest font-black inline-block ml-1 shadow-sm">
-                      {activeOtpCode}
-                    </span>
-                  </p>
-                  <p className="text-[10px] text-gray-900 font-semibold">Sent to: {deliveryTarget} (Valid for 5 mins)</p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={fillDemoOtp}
-                className="px-2.5 py-1.5 bg-black hover:bg-gray-900 active:scale-95 text-amber-400 font-black text-[10px] rounded-xl shadow-md transition cursor-pointer shrink-0"
-              >
-                Auto-Fill
-              </button>
-            </div>
-          )}
-
           {/* OTP VERIFICATION CARD */}
           <div className="bg-white/95 backdrop-blur-xl border rounded-3xl p-6 sm:p-8 shadow-2xl text-center" style={{ borderColor: '#BBAB47' }}>
             <div className="flex items-center justify-between mb-5">
@@ -338,12 +288,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             {/* Target Contact Display */}
             <div className="mt-1.5 space-y-1">
               <p className="text-xs text-gray-600 font-medium">
-                {deliveryType === 'email' ? 'OTP sent to your email address:' : 'OTP sent via SMS to mobile number:'}
+                {deliveryType === 'email' ? 'OTP sent securely to your email address:' : 'OTP sent via SMS to your mobile number:'}
               </p>
               <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl border bg-amber-50/50" style={{ borderColor: '#BBAB47' }}>
                 {deliveryType === 'email' ? <Mail className="w-3.5 h-3.5 text-amber-800 shrink-0" /> : <Smartphone className="w-3.5 h-3.5 text-amber-800 shrink-0" />}
                 <span className="text-xs font-black text-gray-900">{deliveryTarget}</span>
               </div>
+              <p className="text-[11px] text-gray-500 font-medium">Valid for 5 minutes. Check your inbox or SMS messages.</p>
             </div>
 
             {verifyError && (
@@ -372,7 +323,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 ))}
               </div>
 
-              {/* Timer and Resend Cooldown */}
+              {/* Timer and Resend Cooldown (60s) */}
               <div className="flex items-center justify-between text-xs px-2 pt-1 text-gray-600 font-semibold">
                 <span>{timer > 0 ? `Resend OTP in ${timer}s` : "Didn't receive OTP?"}</span>
                 <button 
@@ -420,23 +371,22 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
       <div className="w-full max-w-md relative z-10 py-4">
         
-        {/* Role Helper Demo Banner */}
+        {/* Role Quick Selector Card */}
         <div className="mb-3 bg-white/95 backdrop-blur-md rounded-2xl p-2.5 border border-amber-300 shadow-xl flex items-center justify-between text-xs font-black">
           <span className="text-[11px] text-gray-700 flex items-center space-x-1">
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Select Demo Role:</span>
+            <span>Select Role:</span>
           </span>
           <div className="flex space-x-1.5">
             <button
               type="button"
               onClick={() => {
                 setLoginRole('customer');
-                setLoginId('9876543210');
-                triggerOtpFlow('Login', 'customer', '9876543210');
+                setLoginId('9078699528');
               }}
               className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[10px] font-black transition cursor-pointer"
             >
-              🛍️ Customer OTP
+              🛍️ Customer
             </button>
             <button
               type="button"
@@ -444,11 +394,10 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 setLoginRole('admin');
                 setLoginId('9078699528');
                 setAdminPin('9900');
-                triggerOtpFlow('Login', 'admin', '9078699528', '9900');
               }}
               className="px-2.5 py-1 bg-black hover:bg-gray-800 text-amber-400 rounded-lg text-[10px] font-black transition cursor-pointer"
             >
-              👑 Admin OTP
+              👑 Admin (PIN 9900)
             </button>
           </div>
         </div>
@@ -528,7 +477,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                       if (loginError) setLoginError('');
                     }}
                     required 
-                    placeholder={loginRole === 'admin' ? "9078699528 or admin@sahoosweets.com" : "e.g. 9876543210 or user@gmail.com"} 
+                    placeholder={loginRole === 'admin' ? "9078699528 or admin@sahoosweets.com" : "e.g. 9078699528 or user@gmail.com"} 
                     className="w-full pl-10 pr-4 py-2.5 border rounded-xl text-xs font-black text-black placeholder-gray-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
                     style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}
                   />

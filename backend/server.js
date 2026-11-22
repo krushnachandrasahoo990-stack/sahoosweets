@@ -1,10 +1,17 @@
 // =============================================================================
-// SAHOO SWEETS - PRODUCTION BACKEND SERVER (Express + Node.js)
+// SAHOO SWEETS - PRODUCTION BACKEND SERVER (Express + MongoDB / Mongoose)
 // =============================================================================
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
+
+// Mongoose Models
+const MenuItem = require('./models/MenuItem');
+const Order = require('./models/Order');
+const User = require('./models/User');
+const OtpSession = require('./models/OtpSession');
 
 let nodemailer = null;
 try {
@@ -14,33 +21,168 @@ try {
 }
 
 const app = express();
-app.use(cors());
+
+// Allowed Origins for CORS (Vercel Frontend, Localhost, or custom FRONTEND_URL)
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow during transition to ensure deployment connectivity
+    }
+  },
+  credentials: true
+}));
+
 app.use(express.json());
-
-// Sample Users Database (Mock)
-const users = [
-  { identifier: 'admin@sahoosweets.com', password: 'adminpassword', role: 'admin', name: 'Owner' },
-  { identifier: '9876543210', password: 'password123', role: 'customer', name: 'Customer' }
-];
-
-// Active OTP Memory Store:
-// Map<normalizedIdentifier, { otp: string, expiresAt: number, attempts: number, lastSentAt: number, role: string, type: string }>
-const activeOtps = new Map();
-
-// Rate Limiting Map: Map<normalizedIdentifier, number[]> (timestamps of recent requests)
-const otpRateLimits = new Map();
 
 // Authorized Admin Security PIN
 const ADMIN_ACCESS_PIN = process.env.ADMIN_ACCESS_PIN || '9900';
 
+// -----------------------------------------------------------------------------
+// SEED MENU DATA (25 Authentic Odia Sweets & Breakfast Snacks)
+// -----------------------------------------------------------------------------
+const initialMenuItems = [
+  { id: "sw1", name: "Pahala Style Rosgola", category: "sweets", badge: "BESTSELLER", rating: 4.9, reviews: "260+", desc: "Super spongy, melt-in-mouth cottage cheese balls soaked in authentic warm sugar syrup.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQtwZakNUCDCTGm30bOrOk45IbALQwlXluQBXtq3uCQ-w&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }], isAvailable: true },
+  { id: "sw2", name: "Shahi Gulab Jamun", category: "sweets", badge: "HOT SWEET", rating: 4.8, reviews: "190+", desc: "Deep-fried golden khoya dumplings simmered in fragrant cardamom sugar syrup.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRZI8sJv8_Go96Hn3rFD6JiVIElf8mCd1i2bg2uu2E2CA&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }], isAvailable: true },
+  { id: "sw3", name: "Authentic Cheese Cake", category: "sweets", badge: "NAYAGARH PRIDE", rating: 5.0, reviews: "340+", desc: "Traditional Chhena Podo slow-baked with caramelized crust, cashews & raisins.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ3N0k9IvzdjBRP3o_1KtoEo8HXx-LZkLdxDxy5Nauvng&s=10", variants: [{ label: "100g", price: 40 }, { label: "250g", price: 100 }, { label: "500g", price: 200 }, { label: "1 Kg", price: 400 }], isAvailable: true },
+  { id: "sw4", name: "Nimapada Famous Jhili", category: "sweets", badge: "NIMAPADA SPECIAL", rating: 4.8, reviews: "150+", desc: "Crispy yet juicy chhena spirals fried in pure desi ghee and glazed with cardamom syrup.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRET8Sh2_Dmr3osEYtZa58tQmjstHy_D5NrH9BCSCoK_A&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }], isAvailable: true },
+  { id: "sw5", name: "Crispy Chhena Gaja", category: "sweets", badge: "AUTHENTIC", rating: 4.7, reviews: "130+", desc: "Pure cottage cheese rectangles deep-fried to crunchy brown perfection and glazed with syrup.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSwAgCTQFNTmRQcUlFzArMkJBB9v6rbkjfDCOGFnO5xOg&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }], isAvailable: true },
+  { id: "sw6", name: "Traditional Tadia", category: "sweets", badge: "HERITAGE", rating: 4.6, reviews: "110+", desc: "Rich traditional crunchy fried sweet snack prepared with cottage cheese dough and sugar.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRdzjvg3HnAeOP2CKXvUQ7fIDLSpKBL8MCxNzwqQtrIkw&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }], isAvailable: true },
+  { id: "sw7", name: "Pheni Gaja", category: "sweets", badge: "PURI SPECIAL", rating: 4.9, reviews: "210+", desc: "Crispy layered Odia flaky sweet gaja coated with light cardamom sugar glaze.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcStyf-JcWV1_8L48vANR9Hqto2ZA1zTKeJ_7NTOI1pKPg&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }], isAvailable: true },
+  { id: "sw8", name: "Khira Gaja", category: "sweets", badge: "SWEET DELIGHT", rating: 4.8, reviews: "175+", desc: "Authentic milk cream and chhena infused soft layered gaja soaked in delicious chasni.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSAz4v8xFgf9OpZrUPjlCA9YOGBJQLKIuJ3gZfMhtOFFg&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }], isAvailable: true },
+  { id: "sw9", name: "Crispy Jilapi", category: "sweets", badge: "HOT CRISPY", rating: 4.9, reviews: "280+", desc: "Freshly fried hot spiral jilapis dipped in fragrant saffron and cardamom sugar syrup.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT6ErlGVeIRBOe_cE7cXsHjBlwwc06Sdx-PMlxQoDs6GQ&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }], isAvailable: true },
+  { id: "sw10", name: "Traditional Malpua", category: "sweets", badge: "TEMPLE TASTE", rating: 4.9, reviews: "190+", desc: "Mouth-watering soft and juicy fried sweet pancakes soaked in rich fennel seed scented syrup.", img: "https://cdn.indiaphile.info/wp-content/uploads/2023/08/stp-malpua-4458.jpg?width=1200&format=webp", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }], isAvailable: true },
+  { id: "sw11", name: "Besan Bundi Ladu", category: "sweets", badge: "DESI GHEE", rating: 4.8, reviews: "160+", desc: "Traditional desi ghee bundi laddus flavored with crushed green cardamom, cloves and melon seeds.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1tv0iWsCoAbcPSnCxw565K2Z2ngQYPiJGC-N8i954RA&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }], isAvailable: true },
+  { id: "sw12", name: "Sweet Bundi", category: "sweets", badge: "FRESH", rating: 4.7, reviews: "140+", desc: "Golden crispy sweet tiny gram flour pearls soaked in aromatic cardamom sugar syrup.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRb6FAkJVxg_lkdhxbz4nNbVL7lBLXxD5fQuomNazLusg&s=10", variants: [{ label: "100g", price: 25 }, { label: "250g", price: 50 }, { label: "500g", price: 100 }, { label: "1 Kg", price: 200 }], isAvailable: true },
+  { id: "sw13", name: "Labang Lata", category: "sweets", badge: "ROYAL SWEET", rating: 4.9, reviews: "170+", desc: "Crispy pastry stuffed with sweet khoya and coconut filling, sealed with a fragrant clove.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcStaehqGYkhc6PC82iQ-TIuK-626uM58VQMj5QabE0BRw&s=10", variants: [{ label: "1 Pc", price: 10 }, { label: "250g", price: 90 }, { label: "500g", price: 175 }, { label: "1 Kg", price: 350 }], isAvailable: true },
+
+  { id: "bf1", name: "Bara", category: "breakfast", badge: "HOT CRISPY", rating: 4.9, reviews: "410+", desc: "Crispy fried fermented urad dal vada tempered with curry leaves and green chilies.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT5LxB18dY-XyKVABOKnU3sTHww-zcUEj5QS9n3ZSZ6KA&s=10", variants: [{ label: "1 Pc", price: 5 }, { label: "2 Pcs", price: 10 }, { label: "4 Pcs", price: 20 }], isAvailable: true },
+  { id: "bf2", name: "Singada/Samosa", category: "breakfast", badge: "CRUNCHY", rating: 4.8, reviews: "320+", desc: "Golden flaky pastry filled with spiced potato cubes, roasted peanuts and cumin masala.", img: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80", variants: [{ label: "1 Pc", price: 5 }, { label: "2 Pcs", price: 10 }, { label: "4 Pcs", price: 20 }], isAvailable: true },
+  { id: "bf3", name: "Crispy Alu Chop", category: "breakfast", badge: "STREET SPECIAL", rating: 4.7, reviews: "210+", desc: "Spiced mashed potato patty dipped in seasoned gram flour batter and fried crisp.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR7x_hf9PxJ01aj0vwdEw0FyvezBE6xu2tY_-ZVeAe6Ow&s=10", variants: [{ label: "1 Pc", price: 5 }, { label: "2 Pcs", price: 10 }, { label: "4 Pcs", price: 20 }], isAvailable: true },
+  { id: "bf4", name: "Mottor Curry (Ghuguni)", category: "breakfast", badge: "POPULAR", rating: 4.8, reviews: "290+", desc: "Slow-cooked yellow peas curry simmered with onion, ginger, garlic, tomatoes and garam masala.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRLYKYa3vJcWok1_1ItfryFdk7DdRpEWInZ65jz4OZk3A&s=10", variants: [{ label: "1 Plate", price: 20 }, { label: "2 Plates", price: 40 }], isAvailable: true },
+  { id: "bf5", name: "Garam Puri & Aloo Kasa", category: "breakfast", badge: "MORNING SPECIAL", rating: 4.9, reviews: "350+", desc: "4 golden fluffy wheat puris served with homestyle spicy potato kasa and tangy pickle.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS85hPuRAlOGjBTX_4pRLG1qUUezjwbDz1s5-Fede0x7w&s=10", variants: [{ label: "4 Puris (1 Plate)", price: 20 }, { label: "8 Puris (2 Plates)", price: 40 }], isAvailable: true },
+  { id: "bf6", name: "Suji Kakara Pitha", category: "breakfast", badge: "ODIA PITHA", rating: 4.9, reviews: "180+", desc: "Crispy golden semolina pitha stuffed with freshly grated coconut, jaggery and black pepper.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSouqPkKoh6-I5ZczUc24FFPrzZ_JlpgeYbC9JcT0NX2Q&s=10", variants: [{ label: "1 Pc", price: 5 }, { label: "2 Pcs", price: 10 }, { label: "4 Pcs", price: 20 }], isAvailable: true },
+  { id: "bf7", name: "Steamed Soft Idli", category: "breakfast", badge: "HEALTHY", rating: 4.8, reviews: "220+", desc: "Cloud-soft steamed rice & lentil cake served with coconut chutney and hot curry.", img: "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=600&auto=format&fit=crop&q=80", variants: [{ label: "1 Pc", price: 5 }, { label: "2 Pcs", price: 10 }, { label: "4 Pcs", price: 20 }], isAvailable: true },
+  { id: "bf8", name: "Masala Suji Upma", category: "breakfast", badge: "HOMESTYLE", rating: 4.7, reviews: "160+", desc: "Roasted semolina tempered with mustard seeds, curry leaves, peanuts and served with curry.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTUjcEV6zo1hjEGCgADJRudflhZF3eX4uYk9bvnhU1pdg&s=10", variants: [{ label: "1 Plate", price: 20 }, { label: "2 Plates", price: 40 }], isAvailable: true },
+  { id: "bf9", name: "Garam Piaji / Pakodi", category: "breakfast", badge: "CRUNCHY", rating: 4.8, reviews: "240+", desc: "Crunchy onion and gram flour fritters tossed with green chilies, served with chutney.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRbBwZHxR9t9l3i2DxMkiwGoMNMMGArxa3LuSP1C2j41A&s=10", variants: [{ label: "1 Pc", price: 5 }, { label: "4 Pcs", price: 20 }, { label: "10 Pcs", price: 50 }], isAvailable: true },
+  { id: "bf10", name: "Special Mitha Khata Dahi Bara", category: "breakfast", badge: "ODISHA SPECIAL", rating: 5.0, reviews: "510+", desc: "Soft urad dal baras soaked in sweet-tangy dahi pani, topped with roasted cumin & tamarind.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRT7OMQeUOAImoCzZA1OBdQ7Eluwd1nUBF2U0XD3HmgjA&s=10", variants: [{ label: "1 Pc", price: 15 }, { label: "2 Pcs", price: 30 }, { label: "4 Pcs", price: 60 }], isAvailable: true },
+  { id: "bf11", name: "Authentic Odia Dalma", category: "breakfast", badge: "PURI PRIDE", rating: 4.9, reviews: "320+", desc: "Nutritious toor dal cooked with raw papaya, pumpkin, brinjal, tempered with pure ghee & roasted cumin.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQUKmTSG3K7RgZQuGVNi3fjnhC8GiA84PsYpyNFKNKHfyEWN_t8QbTDTeqK&s=10", variants: [{ label: "1 Plate", price: 20 }, { label: "2 Plates", price: 40 }], isAvailable: true },
+  { id: "bf12", name: "Odia Special Gulugula", category: "breakfast", badge: "HOT MORNING", rating: 4.8, reviews: "190+", desc: "Fluffy and sweet deep-fried whole wheat fritters infused with fennel seeds and jaggery.", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQFVq7GcPq4_03kCtWyfe3vMla8ffXunRs1PJKmNSruEQ&s=10", variants: [{ label: "1 Pc", price: 5 }, { label: "2 Pcs", price: 10 }, { label: "4 Pcs", price: 20 }], isAvailable: true }
+];
+
+// -----------------------------------------------------------------------------
+// IN-MEMORY STORAGE FALLBACK (Active when MongoDB is not connected)
+// -----------------------------------------------------------------------------
+let isDbConnected = false;
+const inMemoryMenuItems = [...initialMenuItems];
+const inMemoryUsers = new Map();
+const inMemoryOrders = [
+  { 
+    id: "SS-1084",
+    userIdentifier: "9078699528",
+    customerName: "Krushna Chandra Sahoo",
+    customerPhone: "9078699528",
+    date: "Nov 18, 2026, 02:40 PM", 
+    items: "Pahala Style Rosgola (1 Kg), Bara (4 Pcs)", 
+    itemsList: [
+      { name: "Pahala Style Rosgola (1 Kg)", qty: 1, price: 350 },
+      { name: "Bara (4 Pcs)", qty: 1, price: 20 }
+    ],
+    itemTotal: 370,
+    deliveryFee: 0,
+    discount: 0,
+    total: 370, 
+    statusIndex: 3, 
+    status: "Out for Delivery",
+    steps: ["Order Confirmed", "Placed", "Shipped/Preparing", "Out for Delivery", "Delivered"],
+    payment: "Cash on Delivery",
+    address: "At/Po - Nagapur, Brahmagiri Road, Puri, Odisha - 752001",
+    estimatedMinutes: 12
+  }
+];
+const inMemoryOtps = new Map();
+const otpRateLimits = new Map();
+
+// Default seed user
+inMemoryUsers.set('9078699528', {
+  identifier: '9078699528',
+  name: 'Krushna Chandra Sahoo',
+  phone: '9078699528',
+  email: 'krushnachandrasahoo990@gmail.com',
+  role: 'customer',
+  walletBalance: 250,
+  rewardPoints: 350,
+  addresses: [
+    { id: 1, name: "Krushna Chandra Sahoo", phone: "9078699528", address: "At/Po - Nagapur, Brahmagiri Road", city: "Puri", state: "Odisha", pin: "752001", isDefault: true },
+    { id: 2, name: "Sahoo Sweets Counter", phone: "9078699528", address: "Grand Road, Near Jagannath Temple", city: "Puri", state: "Odisha", pin: "752001", isDefault: false }
+  ],
+  walletHistory: [
+    { id: 1, type: 'credit', title: 'Welcome Cashback Reward', amount: 250, date: 'Nov 12, 2026' },
+    { id: 2, type: 'credit', title: 'Converted from Partner Rewards', amount: 100, date: 'Nov 15, 2026' }
+  ],
+  rewardsHistory: [
+    { id: 1, type: 'earned', title: 'Order #SS-1084 Purchase Points', points: 37, date: 'Nov 18, 2026' },
+    { id: 2, type: 'converted', title: 'Converted to Sahoo Money', points: -100, date: 'Nov 15, 2026' },
+    { id: 3, type: 'earned', title: 'Signup Bonus Points', points: 413, date: 'Nov 12, 2026' }
+  ],
+  refunds: []
+});
+
+// -----------------------------------------------------------------------------
+// MONGODB CONNECTION & AUTO-SEEDING
+// -----------------------------------------------------------------------------
+async function connectToDatabase() {
+  const mongoUri = process.env.MONGODB_URI;
+  if (!mongoUri) {
+    console.warn('⚠️ [MongoDB] MONGODB_URI not provided. Running in high-speed in-memory database fallback mode.');
+    return;
+  }
+
+  try {
+    mongoose.set('strictQuery', false);
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      autoIndex: true
+    });
+    isDbConnected = true;
+    console.log('✅ [MongoDB] Successfully connected to MongoDB database!');
+
+    // Auto-seed Menu Items if collection is empty
+    const count = await MenuItem.countDocuments();
+    if (count === 0) {
+      console.log('🌱 [MongoDB] Seeding 25 authentic Odia sweets & breakfast items...');
+      await MenuItem.insertMany(initialMenuItems);
+      console.log('✅ [MongoDB] Menu items successfully seeded into database!');
+    } else {
+      console.log(`📦 [MongoDB] Database contains ${count} menu items.`);
+    }
+
+    // Auto-seed demo user if none exists
+    const userCount = await User.countDocuments();
+    if (userCount === 0) {
+      await User.create(inMemoryUsers.get('9078699528'));
+      console.log('👤 [MongoDB] Default user profile initialized.');
+    }
+  } catch (err) {
+    isDbConnected = false;
+    console.warn('⚠️ [MongoDB Connection Warning]: Could not reach MongoDB server. Fallback in-memory database is active:', err.message);
+  }
+}
+
+connectToDatabase();
+
 // =============================================================================
 // HELPER FUNCTIONS: NORMALIZATION & VALIDATION
 // =============================================================================
-
-/**
- * Normalizes and validates whether input is an Indian Mobile or Email.
- * Returns { type: 'phone'|'email'|null, normalized: string, display: string }
- */
 function parseAndValidateIdentifier(input) {
   if (!input || typeof input !== 'string') return null;
   const trimmed = input.trim();
@@ -78,9 +220,6 @@ function parseAndValidateIdentifier(input) {
   return null;
 }
 
-/**
- * Rate limit check: Maximum 5 OTP requests in 10 minutes per identifier
- */
 function isRateLimited(identifier) {
   const now = Date.now();
   const windowMs = 10 * 60 * 1000;
@@ -152,14 +291,14 @@ async function sendEmailOtp(email, otp, type = 'Login') {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          from: process.env.RESEND_FROM || 'Sahoo Sweets <onboarding@resend.dev>',
+          from: process.env.RESEND_FROM || process.env.MAIL_FROM || 'Sahoo Sweets <onboarding@resend.dev>',
           to: email,
           subject,
           html: htmlContent
         })
       });
       const data = await res.json();
-      console.log(`[Email Gateway - Resend] Sent to ${email}. ID:`, data.id || 'ok');
+      console.log(`[Email Gateway - Resend] Dispatched to ${email}. ID:`, data.id || 'ok');
       return { success: true, provider: 'resend', id: data.id };
     } catch (err) {
       console.error('[Email Gateway Error - Resend]:', err);
@@ -167,52 +306,84 @@ async function sendEmailOtp(email, otp, type = 'Login') {
   }
 
   // Option 2: Nodemailer (SMTP / Gmail App Password)
-  if (nodemailer && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+  if (nodemailer && smtpUser && smtpPass) {
     try {
       const transporter = nodemailer.createTransport({
         service: process.env.EMAIL_SERVICE || 'gmail',
-        host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-        port: Number(process.env.EMAIL_PORT) || 587,
+        host: process.env.SMTP_HOST || process.env.EMAIL_HOST || 'smtp.gmail.com',
+        port: Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 587,
         secure: process.env.EMAIL_SECURE === 'true',
         auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS
+          user: smtpUser,
+          pass: smtpPass
         }
       });
 
       const info = await transporter.sendMail({
-        from: process.env.EMAIL_FROM || `"Sahoo Sweets" <${process.env.EMAIL_USER}>`,
+        from: process.env.MAIL_FROM || process.env.EMAIL_FROM || `"Sahoo Sweets" <${smtpUser}>`,
         to: email,
         subject,
         html: htmlContent
       });
 
-      console.log(`[Email Gateway - Nodemailer] Sent to ${email}. MessageId:`, info.messageId);
+      console.log(`[Email Gateway - Nodemailer] Dispatched to ${email}. MessageId:`, info.messageId);
       return { success: true, provider: 'nodemailer', id: info.messageId };
     } catch (err) {
       console.error('[Email Gateway Error - Nodemailer]:', err);
     }
   }
 
-  // Option 3: Development / Fallback Console Logging
+  // Option 3: Development / Fallback Console Logging (Zero client exposure)
   console.log(`\n======================================================`);
-  console.log(`📧 [EMAIL OTP SIMULATOR - DEV MODE]`);
+  console.log(`📧 [EMAIL OTP DISPATCH LOG - SERVER CONSOLE ONLY]`);
   console.log(`To:       ${email}`);
   console.log(`Subject:  ${subject}`);
   console.log(`OTP Code: ${otp}`);
-  console.log(`Validity: 5 Minutes`);
-  console.log(`Note:     Configure EMAIL_USER / EMAIL_PASS or RESEND_API_KEY in .env for live email`);
+  console.log(`Validity: 5 Minutes (Resend Cooldown: 60 Seconds)`);
+  console.log(`Note:     Configure SMTP_USER/SMTP_PASS or RESEND_API_KEY in .env for live email`);
   console.log(`======================================================\n`);
   return { success: true, provider: 'dev-console', simulated: true };
 }
 
 /**
- * Sends Phone OTP to Indian Mobile via Fast2SMS / MSG91 API
+ * Sends Phone OTP to Indian Mobile via Twilio / Fast2SMS / MSG91 API
  */
 async function sendSmsOtp(phoneNumber, otp) {
-  const smsApiKey = process.env.FAST2SMS_API_KEY || process.env.SMS_API_KEY;
+  // Option 1: Twilio SMS Gateway
+  const twilioSid = process.env.TWILIO_SID;
+  const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioPhone = process.env.TWILIO_PHONE;
 
-  // Option 1: Fast2SMS (Indian SMS Gateway)
+  if (twilioSid && twilioAuthToken && twilioPhone) {
+    try {
+      const auth = Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64');
+      const bodyParams = new URLSearchParams({
+        To: `+91${phoneNumber}`,
+        From: twilioPhone,
+        Body: `Your Sahoo Sweets verification code is ${otp}. Valid for 5 minutes. Do not share this OTP with anyone.`
+      });
+
+      const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: bodyParams.toString()
+      });
+
+      const data = await response.json();
+      console.log(`[SMS Gateway - Twilio] Dispatched to +91 ${phoneNumber}. SID:`, data.sid);
+      return { success: true, provider: 'twilio', sid: data.sid };
+    } catch (err) {
+      console.error('[SMS Gateway Error - Twilio]:', err);
+    }
+  }
+
+  // Option 2: Fast2SMS (Indian SMS Gateway)
+  const smsApiKey = process.env.FAST2SMS_API_KEY || process.env.SMS_API_KEY;
   if (smsApiKey) {
     try {
       const response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
@@ -235,7 +406,7 @@ async function sendSmsOtp(phoneNumber, otp) {
     }
   }
 
-  // Option 2: MSG91 Gateway (Optional Alternative)
+  // Option 3: MSG91 Gateway
   if (process.env.MSG91_AUTH_KEY) {
     try {
       const templateId = process.env.MSG91_TEMPLATE_ID;
@@ -249,19 +420,21 @@ async function sendSmsOtp(phoneNumber, otp) {
     }
   }
 
-  // Option 3: Development / Fallback Console Logging
+  // Option 4: Development / Fallback Console Logging (Zero client exposure)
   console.log(`\n======================================================`);
-  console.log(`📱 [INDIAN SMS OTP SIMULATOR - DEV MODE]`);
+  console.log(`📱 [INDIAN SMS OTP DISPATCH LOG - SERVER CONSOLE ONLY]`);
   console.log(`Recipient: +91 ${phoneNumber}`);
   console.log(`Message:   Your Sahoo Sweets verification code is ${otp}. Valid for 5 minutes.`);
   console.log(`OTP Code:  ${otp}`);
-  console.log(`Note:      Configure FAST2SMS_API_KEY in .env for live SMS delivery`);
+  console.log(`Validity: 5 Minutes (Resend Cooldown: 60 Seconds)`);
+  console.log(`Note:      Configure TWILIO_SID/TWILIO_AUTH_TOKEN or FAST2SMS_API_KEY in .env for live SMS`);
   console.log(`======================================================\n`);
   return { success: true, provider: 'dev-console', simulated: true };
 }
 
 // =============================================================================
-// ROUTE: 1. SEND OTP (/api/auth/send-otp & alias /api/send-otp)
+// ROUTE: 1. SEND OTP (/api/auth/send-otp)
+// ZERO-EXPOSURE: OTP is NEVER returned in response JSON
 // =============================================================================
 const handleSendOtp = async (req, res) => {
   try {
@@ -303,31 +476,55 @@ const handleSendOtp = async (req, res) => {
       });
     }
 
-    // 30-Second Cooldown Check
-    const existing = activeOtps.get(normalized);
+    // 60-Second Cooldown Check
     const now = Date.now();
-    if (existing && existing.lastSentAt && (now - existing.lastSentAt < 30000)) {
-      const remainingSecs = Math.ceil((30000 - (now - existing.lastSentAt)) / 1000);
-      return res.status(429).json({
-        success: false,
-        message: `Please wait ${remainingSecs}s before requesting a new OTP code.`,
-        cooldown: remainingSecs
-      });
+    let existingSession = null;
+
+    if (isDbConnected) {
+      existingSession = await OtpSession.findOne({ identifier: normalized }).sort({ createdAt: -1 });
+    } else {
+      existingSession = inMemoryOtps.get(normalized);
     }
 
-    // Invalidate previous OTP and generate a secure 6-digit numeric code
-    const otp = crypto.randomInt(100000, 1000000).toString();
-    const expiresAt = now + 5 * 60 * 1000; // 5-minute expiry
+    if (existingSession && existingSession.lastSentAt) {
+      const lastSentTime = new Date(existingSession.lastSentAt).getTime();
+      if (now - lastSentTime < 60000) {
+        const remainingSecs = Math.ceil((60000 - (now - lastSentTime)) / 1000);
+        return res.status(429).json({
+          success: false,
+          message: `Please wait ${remainingSecs}s before requesting a new OTP code.`,
+          cooldown: remainingSecs
+        });
+      }
+    }
 
-    // Store in activeOtps map
-    activeOtps.set(normalized, {
-      otp,
-      expiresAt,
-      attempts: 0,
-      lastSentAt: now,
-      role: role || 'customer',
-      type: type || 'Login'
-    });
+    // Generate secure 6-digit numeric OTP and 5-minute expiry
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const expiresAt = new Date(now + 5 * 60 * 1000);
+
+    // Save to Database or Memory Store
+    if (isDbConnected) {
+      await OtpSession.deleteMany({ identifier: normalized });
+      await OtpSession.create({
+        identifier: normalized,
+        otp,
+        expiresAt,
+        attempts: 0,
+        role: role || 'customer',
+        type: type || 'Login',
+        lastSentAt: new Date(now)
+      });
+    } else {
+      inMemoryOtps.set(normalized, {
+        identifier: normalized,
+        otp,
+        expiresAt,
+        attempts: 0,
+        role: role || 'customer',
+        type: type || 'Login',
+        lastSentAt: now
+      });
+    }
 
     // Real Delivery Trigger (Email vs Indian SMS)
     let deliveryResult;
@@ -337,8 +534,7 @@ const handleSendOtp = async (req, res) => {
       deliveryResult = await sendSmsOtp(normalized, otp);
     }
 
-    const isDev = process.env.NODE_ENV !== 'production';
-
+    // ZERO EXPOSURE: OTP is NEVER sent in response JSON
     return res.status(200).json({
       success: true,
       message: identifierType === 'email'
@@ -347,10 +543,8 @@ const handleSendOtp = async (req, res) => {
       target: display,
       identifierType,
       expiresIn: 300,
-      cooldown: 30,
-      provider: deliveryResult?.provider || 'default',
-      // In development mode, provide demoOtp for easy UI testing/auto-fill banner
-      demoOtp: isDev ? otp : undefined
+      cooldown: 60,
+      provider: deliveryResult?.provider || 'default'
     });
   } catch (error) {
     console.error('[Send OTP Server Error]:', error);
@@ -365,9 +559,9 @@ app.post('/api/auth/send-otp', handleSendOtp);
 app.post('/api/send-otp', handleSendOtp);
 
 // =============================================================================
-// ROUTE: 2. VERIFY OTP (/api/auth/verify-otp & alias /api/verify-otp)
+// ROUTE: 2. VERIFY OTP (/api/auth/verify-otp)
 // =============================================================================
-const handleVerifyOtp = (req, res) => {
+const handleVerifyOtp = async (req, res) => {
   try {
     const { identifier, otp } = req.body;
 
@@ -386,27 +580,52 @@ const handleVerifyOtp = (req, res) => {
     const { normalized, display } = parsed;
     const cleanOtp = String(otp).trim();
 
-    // Master test bypass code in non-production
+    // Development bypass master code for testing
     const isDev = process.env.NODE_ENV !== 'production';
     if (isDev && (cleanOtp === '123456' || cleanOtp === '1234')) {
-      const record = activeOtps.get(normalized);
-      const verifiedRole = record?.role || 'customer';
-      activeOtps.delete(normalized);
-
       const token = `ss_session_${Buffer.from(`${normalized}:${Date.now()}`).toString('base64')}`;
+      
+      let user = null;
+      if (isDbConnected) {
+        user = await User.findOne({ identifier: normalized });
+        if (!user) {
+          user = await User.create({
+            identifier: normalized,
+            name: normalized.includes('@') ? normalized.split('@')[0] : 'Sahoo Customer',
+            phone: normalized.includes('@') ? '' : normalized,
+            email: normalized.includes('@') ? normalized : ''
+          });
+        }
+      } else {
+        user = inMemoryUsers.get(normalized) || {
+          identifier: normalized,
+          name: 'Sahoo Customer',
+          role: 'customer',
+          walletBalance: 250,
+          rewardPoints: 350
+        };
+      }
+
       return res.status(200).json({
         success: true,
-        message: 'OTP verified successfully (Development Master Code)!',
+        message: 'OTP verified successfully (Development Mode)!',
         token,
         user: {
           identifier: display,
-          role: verifiedRole,
-          name: verifiedRole === 'admin' ? 'Sahoo Sweets Admin' : 'Sahoo Customer'
+          role: user.role || 'customer',
+          name: user.name || 'Sahoo Customer',
+          walletBalance: user.walletBalance,
+          rewardPoints: user.rewardPoints
         }
       });
     }
 
-    const record = activeOtps.get(normalized);
+    let record = null;
+    if (isDbConnected) {
+      record = await OtpSession.findOne({ identifier: normalized }).sort({ createdAt: -1 });
+    } else {
+      record = inMemoryOtps.get(normalized);
+    }
 
     // Check if record exists
     if (!record) {
@@ -417,36 +636,88 @@ const handleVerifyOtp = (req, res) => {
     }
 
     // Check 5-minute validity window
-    if (Date.now() > record.expiresAt) {
-      activeOtps.delete(normalized);
+    const expiresAtTime = new Date(record.expiresAt).getTime();
+    if (Date.now() > expiresAtTime) {
+      if (isDbConnected) {
+        await OtpSession.deleteMany({ identifier: normalized });
+      } else {
+        inMemoryOtps.delete(normalized);
+      }
       return res.status(400).json({
         success: false,
         message: 'OTP has expired after 5 minutes! Please request a new OTP.'
       });
     }
 
-    // Attempt Limit Check (Max 3 wrong attempts)
+    // Max 3 Wrong Attempts check
     if (record.otp !== cleanOtp) {
-      record.attempts = (record.attempts || 0) + 1;
+      const attempts = (record.attempts || 0) + 1;
 
-      if (record.attempts >= 3) {
-        activeOtps.delete(normalized);
+      if (isDbConnected) {
+        record.attempts = attempts;
+        await record.save();
+      } else {
+        record.attempts = attempts;
+      }
+
+      if (attempts >= 3) {
+        if (isDbConnected) {
+          await OtpSession.deleteMany({ identifier: normalized });
+        } else {
+          inMemoryOtps.delete(normalized);
+        }
         return res.status(400).json({
           success: false,
           message: 'Too many incorrect attempts (3/3). This OTP has been invalidated for security. Please request a new OTP.'
         });
       }
 
-      const attemptsLeft = 3 - record.attempts;
+      const attemptsLeft = 3 - attempts;
       return res.status(400).json({
         success: false,
         message: `Incorrect 6-digit OTP. You have ${attemptsLeft} attempt${attemptsLeft > 1 ? 's' : ''} remaining.`
       });
     }
 
-    // OTP Verified Successfully!
+    // OTP Verified Successfully! Clear OTP record
     const verifiedRole = record.role || 'customer';
-    activeOtps.delete(normalized);
+    if (isDbConnected) {
+      await OtpSession.deleteMany({ identifier: normalized });
+    } else {
+      inMemoryOtps.delete(normalized);
+    }
+
+    // Find or create user in Database / Memory
+    let user = null;
+    if (isDbConnected) {
+      user = await User.findOne({ identifier: normalized });
+      if (!user) {
+        user = await User.create({
+          identifier: normalized,
+          name: verifiedRole === 'admin' ? 'Sahoo Sweets Admin' : (normalized.includes('@') ? normalized.split('@')[0] : 'Sahoo Customer'),
+          phone: normalized.includes('@') ? '' : normalized,
+          email: normalized.includes('@') ? normalized : '',
+          role: verifiedRole
+        });
+      }
+    } else {
+      if (!inMemoryUsers.has(normalized)) {
+        inMemoryUsers.set(normalized, {
+          identifier: normalized,
+          name: verifiedRole === 'admin' ? 'Sahoo Sweets Admin' : 'Sahoo Customer',
+          phone: normalized.includes('@') ? '' : normalized,
+          email: normalized.includes('@') ? normalized : '',
+          role: verifiedRole,
+          walletBalance: 250,
+          rewardPoints: 350,
+          addresses: [],
+          walletHistory: [{ id: 1, type: 'credit', title: 'Welcome Cashback Reward', amount: 250, date: new Date().toLocaleDateString() }],
+          rewardsHistory: [{ id: 1, type: 'earned', title: 'Signup Bonus Points', points: 350, date: new Date().toLocaleDateString() }],
+          refunds: []
+        });
+      }
+      user = inMemoryUsers.get(normalized);
+    }
 
     const token = `ss_session_${Buffer.from(`${normalized}:${Date.now()}`).toString('base64')}`;
 
@@ -457,7 +728,9 @@ const handleVerifyOtp = (req, res) => {
       user: {
         identifier: display,
         role: verifiedRole,
-        name: verifiedRole === 'admin' ? 'Sahoo Sweets Admin' : 'Sahoo Customer'
+        name: user.name || (verifiedRole === 'admin' ? 'Sahoo Sweets Admin' : 'Sahoo Customer'),
+        walletBalance: user.walletBalance ?? 250,
+        rewardPoints: user.rewardPoints ?? 350
       }
     });
   } catch (error) {
@@ -478,67 +751,503 @@ app.post('/api/auth/verify-admin-pin', (req, res) => {
   if (pin && pin.trim() === ADMIN_ACCESS_PIN) {
     res.json({ success: true, message: 'Admin PIN authorized!' });
   } else {
-    res.status(403).json({ success: false, message: 'Invalid Admin Access PIN!' });
+    res.status(403).json({ success: false, message: 'Invalid Admin Access PIN! Default is 9900.' });
   }
 });
 
-// Standard Login API Endpoint
-app.post('/api/login', (req, res) => {
-  const { identifier, password, role } = req.body;
-  const user = users.find(u => u.identifier === identifier && u.password === password && u.role === role);
-
-  if (user) {
-    res.json({ success: true, message: 'Login successful!', user: { name: user.name, role: user.role } });
-  } else {
-    res.status(401).json({ success: false, message: 'Invalid credentials or role!' });
+// =============================================================================
+// MENU APIS: 25 TRADITIONAL ITEMS + STOCK TOGGLE
+// =============================================================================
+app.get('/api/menu', async (req, res) => {
+  try {
+    if (isDbConnected) {
+      const items = await MenuItem.find().sort({ id: 1 });
+      return res.json({ success: true, menu: items });
+    }
+    return res.json({ success: true, menu: inMemoryMenuItems });
+  } catch (err) {
+    console.error('[Menu API Error]:', err);
+    return res.json({ success: true, menu: inMemoryMenuItems });
   }
 });
 
-// Register API Endpoint
-app.post('/api/register', (req, res) => {
-  const { name, identifier, password, role } = req.body;
-  
-  const existingUser = users.find(u => u.identifier === identifier);
-  if (existingUser) {
-    return res.status(400).json({ success: false, message: 'User already exists with this phone or email!' });
-  }
+app.patch('/api/menu/:id/toggle-stock', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let isAvailable = true;
 
-  users.push({ name, identifier, password, role });
-  res.json({ success: true, message: 'Registration successful!' });
+    if (isDbConnected) {
+      const item = await MenuItem.findOne({ id });
+      if (item) {
+        item.isAvailable = !item.isAvailable;
+        await item.save();
+        isAvailable = item.isAvailable;
+      }
+    } else {
+      const item = inMemoryMenuItems.find(i => i.id === id);
+      if (item) {
+        item.isAvailable = !item.isAvailable;
+        isAvailable = item.isAvailable;
+      }
+    }
+
+    return res.json({ success: true, id, isAvailable });
+  } catch (err) {
+    console.error('[Toggle Stock Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update item availability' });
+  }
 });
 
-// --- FULL SWEETS MENU & CATALOG API (25 Traditional Items) ---
-const sweetsMenu = [
-  { id: 1, name: 'Rasgulla', price: 120, category: 'Syrup Based', image: 'https://images.unsplash.com/photo-1599785209707-a456fc1337bb?w=500', description: 'Soft and spongy cottage cheese balls dipped in light sugar syrup.' },
-  { id: 2, name: 'Gulab Jamun', price: 140, category: 'Syrup Based', image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=500', description: 'Deep-fried khoya dumplings soaked in fragrant rose-cardamom sugar syrup.' },
-  { id: 3, name: 'Kaju Katli', price: 450, category: 'Dry Fruit', image: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=500', description: 'Traditional diamond-shaped rich cashew fudge garnished with edible silver foil.' },
-  { id: 4, name: 'Motichoor Laddu', price: 200, category: 'Traditional', image: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=500', description: 'Delicate pearl-like gram flour droplets sweet-laden and rolled into rich spheres.' },
-  { id: 5, name: 'Rasmalai', price: 260, category: 'Milk Based', image: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=500', description: 'Soft paneer discs immersed in chilled, sweetened, thickened creamy milk.' },
-  { id: 6, name: 'Jalebi', price: 100, category: 'Traditional', image: 'https://images.unsplash.com/photo-1663148117765-a8c627f12e8b?w=500', description: 'Crispy, deep-fried wheat flour swirls soaked in saffron sugar syrup.' },
-  { id: 7, name: 'Mysore Pak', price: 300, category: 'Ghee Special', image: 'https://images.unsplash.com/photo-1601342630013-04da0c0a76f1?w=500', description: 'Rich sweet dish made of generous ghee, gram flour, and sugar.' },
-  { id: 8, name: 'Soan Papdi', price: 180, category: 'Flaky', image: 'https://images.unsplash.com/photo-1599785209707-a456fc1337bb?w=500', description: 'Flaky, cube-shaped sweet melting instantly in your mouth with cardamoms.' },
-  { id: 9, name: 'Milk Cake', price: 340, category: 'Milk Based', image: 'https://images.unsplash.com/photo-1579372786545-d24232daf58c?w=500', description: 'Traditional Indian fudge made from solidified, sweetened milk with a grainy texture.' },
-  { id: 10, name: 'Besan Laddu', price: 220, category: 'Traditional', image: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=500', description: 'Roasted gram flour balls bound together with pure ghee and powdered sugar.' },
-  { id: 11, name: 'Kalakand', price: 320, category: 'Milk Based', image: 'https://images.unsplash.com/photo-1579372786545-d24232daf58c?w=500', description: 'Soft and juicy sweet sweetened condensed milk cake topped with pistachios.' },
-  { id: 12, name: 'Peda (Mathura)', price: 280, category: 'Milk Based', image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=500', description: 'Traditional semi-soft confection prepared from khoya and sugar.' },
-  { id: 13, name: 'Anjeer Roll', price: 550, category: 'Dry Fruit', image: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=500', description: 'Roll made from dried figs, dates, and assorted nuts without added sugar.' },
-  { id: 14, name: 'Dry Fruit Ladoo', price: 500, category: 'Dry Fruit', image: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=500', description: 'Healthy and energy-packed landoos crafted from dates, almonds, and cashews.' },
-  { id: 15, name: 'Imli / Imarti', price: 160, category: 'Traditional', image: 'https://images.unsplash.com/photo-1663148117765-a8c627f12e8b?w=500', description: 'Flower-shaped deep-fried lentil batter rings soaked in sugar syrup.' },
-  { id: 16, name: 'Boondi Laddu', price: 150, category: 'Traditional', image: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=500', description: 'Classic festive golden fried sweet boondi spheres.' },
-  { id: 17, name: 'Sandesh', price: 240, category: 'Bengali Special', image: 'https://images.unsplash.com/photo-1599785209707-a456fc1337bb?w=500', description: 'Delicate Bengali sweet made from fresh paneer and lightly flavored with cardamom.' },
-  { id: 18, name: 'Cham Cham', price: 250, category: 'Bengali Special', image: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=500', description: 'Traditional Bengali oval-shaped sweet coated with mawa flakes.' },
-  { id: 19, name: 'Poha Barfi', price: 300, category: 'Specialty', image: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=500', description: 'Unique sweet delicacy prepared with flattened rice, milk, and dry fruits.' },
-  { id: 20, name: 'Coconut Ladoo', price: 200, category: 'Traditional', image: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=500', description: 'Juicy coconut flakes mixed with condensed milk and shaped into balls.' },
-  { id: 21, name: 'Malpua', price: 180, category: 'Syrup Based', image: 'https://images.unsplash.com/photo-1663148117765-a8c627f12e8b?w=500', description: 'Traditional fried pancake dipped in sugar syrup, served with rabri.' },
-  { id: 22, name: 'Badam Halwa', price: 600, category: 'Halwa Special', image: 'https://images.unsplash.com/photo-1601342630013-04da0c0a76f1?w=500', description: 'Rich, dense sweet made from ground almonds, milk, sugar, and generous ghee.' },
-  { id: 23, name: 'Gajar Halwa', price: 240, category: 'Halwa Special', image: 'https://images.unsplash.com/photo-1601342630013-04da0c0a76f1?w=500', description: 'Classic winter dessert made with grated carrots, full-fat milk, and mawa.' },
-  { id: 24, name: 'Doda Burfi', price: 380, category: 'Milk Based', image: 'https://images.unsplash.com/photo-1579372786545-d24232daf58c?w=500', description: 'Chewy, milky, and nutty traditional Punjabi fudge.' },
-  { id: 25, name: 'Patisa', price: 220, category: 'Flaky', image: 'https://images.unsplash.com/photo-1599785209707-a456fc1337bb?w=500', description: 'Crispy, multi-layered sweet made of gram flour, ghee, and crushed nuts.' }
-];
+// =============================================================================
+// ORDERS APIS: CRUD, REAL STAGE UPDATES & CANCELLATIONS
+// =============================================================================
+app.get('/api/orders', async (req, res) => {
+  try {
+    const { userIdentifier, role } = req.query;
 
-// GET Menu API Endpoint
-app.get('/api/menu', (req, res) => {
-  res.json({ success: true, menu: sweetsMenu });
+    if (isDbConnected) {
+      const query = (role === 'admin' || !userIdentifier) ? {} : { userIdentifier };
+      const orders = await Order.find(query).sort({ createdAt: -1 });
+      return res.json({ success: true, orders });
+    }
+
+    let result = inMemoryOrders;
+    if (role !== 'admin' && userIdentifier) {
+      result = inMemoryOrders.filter(o => o.userIdentifier === userIdentifier);
+    }
+    return res.json({ success: true, orders: result });
+  } catch (err) {
+    console.error('[Orders API Error]:', err);
+    return res.json({ success: true, orders: inMemoryOrders });
+  }
+});
+
+app.post('/api/orders', async (req, res) => {
+  try {
+    const orderData = req.body;
+    const orderId = orderData.id || `SS-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const newOrder = {
+      id: orderId,
+      userIdentifier: orderData.userIdentifier || '9078699528',
+      customerName: orderData.customerName || 'Customer',
+      customerPhone: orderData.customerPhone || '9078699528',
+      date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      items: orderData.items || 'Sahoo Sweets Assorted Pack',
+      itemsList: orderData.itemsList || [],
+      itemTotal: orderData.itemTotal || orderData.total || 0,
+      deliveryFee: orderData.deliveryFee ?? 35,
+      discount: orderData.discount ?? 0,
+      tip: orderData.tip ?? 0,
+      total: orderData.total,
+      status: 'Order Confirmed',
+      statusIndex: 0,
+      steps: ["Order Confirmed", "Placed", "Shipped/Preparing", "Out for Delivery", "Delivered"],
+      payment: orderData.payment || 'Cash on Delivery',
+      address: orderData.address || 'Grand Road, Puri',
+      deliveryInstructions: orderData.deliveryInstructions || '',
+      cookingInstruction: orderData.cookingInstruction || '',
+      estimatedMinutes: 24,
+      partner: {
+        name: 'Ramesh Kumar',
+        phone: '+91 98612 34567',
+        rating: 4.9,
+        deliveries: '1,420+',
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        badge: 'Top Rated Valet'
+      }
+    };
+
+    // Calculate Reward Points Earned (10% of total)
+    const earnedPoints = Math.round(Number(newOrder.total) * 0.1);
+
+    if (isDbConnected) {
+      await Order.create(newOrder);
+
+      // Update User Wallet & Reward History if user exists
+      const user = await User.findOne({ identifier: newOrder.userIdentifier });
+      if (user) {
+        if (newOrder.payment === 'Sahoo Money Wallet') {
+          user.walletBalance = Math.max(0, user.walletBalance - newOrder.total);
+          user.walletHistory.unshift({
+            id: Date.now(),
+            type: 'debit',
+            title: `Paid for Order #${newOrder.id}`,
+            amount: newOrder.total,
+            date: newOrder.date
+          });
+        }
+        user.rewardPoints = (user.rewardPoints || 0) + earnedPoints;
+        user.rewardsHistory.unshift({
+          id: Date.now() + 1,
+          type: 'earned',
+          title: `Order #${newOrder.id} Purchase Points`,
+          points: earnedPoints,
+          date: newOrder.date
+        });
+        await user.save();
+      }
+    } else {
+      inMemoryOrders.unshift(newOrder);
+      const user = inMemoryUsers.get(newOrder.userIdentifier);
+      if (user) {
+        if (newOrder.payment === 'Sahoo Money Wallet') {
+          user.walletBalance = Math.max(0, user.walletBalance - newOrder.total);
+          user.walletHistory.unshift({
+            id: Date.now(),
+            type: 'debit',
+            title: `Paid for Order #${newOrder.id}`,
+            amount: newOrder.total,
+            date: newOrder.date
+          });
+        }
+        user.rewardPoints = (user.rewardPoints || 0) + earnedPoints;
+        user.rewardsHistory.unshift({
+          id: Date.now() + 1,
+          type: 'earned',
+          title: `Order #${newOrder.id} Purchase Points`,
+          points: earnedPoints,
+          date: newOrder.date
+        });
+      }
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Order created successfully!',
+      order: newOrder,
+      earnedPoints
+    });
+  } catch (err) {
+    console.error('[Create Order Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to place order' });
+  }
+});
+
+app.patch('/api/orders/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { statusIndex, status } = req.body;
+
+    const steps = ["Order Confirmed", "Placed", "Shipped/Preparing", "Out for Delivery", "Delivered"];
+    const newStatus = status || steps[statusIndex] || 'Delivered';
+
+    if (isDbConnected) {
+      const order = await Order.findOneAndUpdate(
+        { id },
+        { statusIndex, status: newStatus },
+        { new: true }
+      );
+      return res.json({ success: true, order });
+    }
+
+    const order = inMemoryOrders.find(o => o.id === id);
+    if (order) {
+      order.statusIndex = statusIndex;
+      order.status = newStatus;
+      return res.json({ success: true, order });
+    }
+
+    return res.status(404).json({ success: false, message: 'Order not found' });
+  } catch (err) {
+    console.error('[Update Order Status Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update order status' });
+  }
+});
+
+app.post('/api/orders/:id/cancel', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (isDbConnected) {
+      const order = await Order.findOne({ id });
+      if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+      order.status = 'Cancelled';
+      order.statusIndex = -1;
+      await order.save();
+
+      // Add to user refunds
+      const user = await User.findOne({ identifier: order.userIdentifier });
+      if (user) {
+        user.refunds.unshift({
+          orderId: order.id,
+          amount: order.total,
+          reason: reason || 'Customer requested cancellation',
+          date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+          status: 'Processed'
+        });
+        await user.save();
+      }
+
+      return res.json({ success: true, message: 'Order cancelled successfully', order });
+    }
+
+    const order = inMemoryOrders.find(o => o.id === id);
+    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+    order.status = 'Cancelled';
+    order.statusIndex = -1;
+
+    const user = inMemoryUsers.get(order.userIdentifier);
+    if (user) {
+      user.refunds.unshift({
+        orderId: order.id,
+        amount: order.total,
+        reason: reason || 'Customer requested cancellation',
+        date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+        status: 'Processed'
+      });
+    }
+
+    return res.json({ success: true, message: 'Order cancelled successfully', order });
+  } catch (err) {
+    console.error('[Cancel Order Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to cancel order' });
+  }
+});
+
+app.post('/api/orders/:id/rate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, feedback } = req.body;
+
+    if (isDbConnected) {
+      const order = await Order.findOneAndUpdate({ id }, { rating, feedback }, { new: true });
+      return res.json({ success: true, order });
+    }
+
+    const order = inMemoryOrders.find(o => o.id === id);
+    if (order) {
+      order.rating = rating;
+      order.feedback = feedback;
+      return res.json({ success: true, order });
+    }
+
+    return res.status(404).json({ success: false, message: 'Order not found' });
+  } catch (err) {
+    console.error('[Rate Order Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to submit rating' });
+  }
+});
+
+// =============================================================================
+// USER PROFILE, REWARDS & WALLET APIS
+// =============================================================================
+app.get('/api/users/profile', async (req, res) => {
+  try {
+    const { identifier } = req.query;
+    if (!identifier) return res.status(400).json({ success: false, message: 'Identifier required' });
+
+    const norm = identifier.trim().toLowerCase();
+    let user = null;
+
+    if (isDbConnected) {
+      user = await User.findOne({ identifier: norm });
+      if (!user) {
+        user = await User.create({
+          identifier: norm,
+          name: norm.includes('@') ? norm.split('@')[0] : 'Sahoo Customer',
+          phone: norm.includes('@') ? '' : norm,
+          email: norm.includes('@') ? norm : ''
+        });
+      }
+    } else {
+      user = inMemoryUsers.get(norm);
+      if (!user) {
+        user = {
+          identifier: norm,
+          name: 'Sahoo Customer',
+          phone: norm.includes('@') ? '' : norm,
+          email: norm.includes('@') ? norm : '',
+          role: 'customer',
+          walletBalance: 250,
+          rewardPoints: 350,
+          addresses: [],
+          walletHistory: [],
+          rewardsHistory: [],
+          refunds: []
+        };
+        inMemoryUsers.set(norm, user);
+      }
+    }
+
+    return res.json({ success: true, profile: user });
+  } catch (err) {
+    console.error('[Profile API Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to load profile' });
+  }
+});
+
+app.put('/api/users/profile', async (req, res) => {
+  try {
+    const { identifier, name, phone, email, addresses } = req.body;
+    if (!identifier) return res.status(400).json({ success: false, message: 'Identifier required' });
+
+    const norm = identifier.trim().toLowerCase();
+
+    if (isDbConnected) {
+      const user = await User.findOne({ identifier: norm });
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+      if (name) user.name = name;
+      if (phone) user.phone = phone;
+      if (email) user.email = email;
+      if (addresses) user.addresses = addresses;
+      await user.save();
+      return res.json({ success: true, profile: user });
+    }
+
+    const user = inMemoryUsers.get(norm);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+    if (email) user.email = email;
+    if (addresses) user.addresses = addresses;
+
+    return res.json({ success: true, profile: user });
+  } catch (err) {
+    console.error('[Update Profile Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update profile' });
+  }
+});
+
+app.post('/api/wallet/convert-rewards', async (req, res) => {
+  try {
+    const { identifier, points } = req.body;
+    const numPoints = parseInt(points, 10);
+    if (!identifier || !numPoints || numPoints <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid identifier and points required' });
+    }
+
+    const norm = identifier.trim().toLowerCase();
+    const dateStr = new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+
+    if (isDbConnected) {
+      const user = await User.findOne({ identifier: norm });
+      if (!user || user.rewardPoints < numPoints) {
+        return res.status(400).json({ success: false, message: 'Insufficient reward points to convert' });
+      }
+
+      user.rewardPoints -= numPoints;
+      user.walletBalance = (user.walletBalance || 0) + numPoints;
+      user.rewardsHistory.unshift({
+        id: Date.now(),
+        type: 'converted',
+        title: 'Converted to Sahoo Money',
+        points: -numPoints,
+        date: dateStr
+      });
+      user.walletHistory.unshift({
+        id: Date.now() + 1,
+        type: 'credit',
+        title: 'Converted from Partner Rewards',
+        amount: numPoints,
+        date: dateStr
+      });
+      await user.save();
+
+      return res.json({
+        success: true,
+        message: `Successfully converted ${numPoints} points to ₹${numPoints} Sahoo Money!`,
+        walletBalance: user.walletBalance,
+        rewardPoints: user.rewardPoints
+      });
+    }
+
+    const user = inMemoryUsers.get(norm);
+    if (!user || user.rewardPoints < numPoints) {
+      return res.status(400).json({ success: false, message: 'Insufficient reward points to convert' });
+    }
+
+    user.rewardPoints -= numPoints;
+    user.walletBalance = (user.walletBalance || 0) + numPoints;
+    user.rewardsHistory.unshift({
+      id: Date.now(),
+      type: 'converted',
+      title: 'Converted to Sahoo Money',
+      points: -numPoints,
+      date: dateStr
+    });
+    user.walletHistory.unshift({
+      id: Date.now() + 1,
+      type: 'credit',
+      title: 'Converted from Partner Rewards',
+      amount: numPoints,
+      date: dateStr
+    });
+
+    return res.json({
+      success: true,
+      message: `Successfully converted ${numPoints} points to ₹${numPoints} Sahoo Money!`,
+      walletBalance: user.walletBalance,
+      rewardPoints: user.rewardPoints
+    });
+  } catch (err) {
+    console.error('[Convert Rewards Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to convert reward points' });
+  }
+});
+
+app.post('/api/wallet/recharge', async (req, res) => {
+  try {
+    const { identifier, amount } = req.body;
+    const numAmount = parseFloat(amount);
+    if (!identifier || !numAmount || numAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid identifier and amount required' });
+    }
+
+    const norm = identifier.trim().toLowerCase();
+    const dateStr = new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+
+    if (isDbConnected) {
+      const user = await User.findOne({ identifier: norm });
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+      user.walletBalance = (user.walletBalance || 0) + numAmount;
+      user.walletHistory.unshift({
+        id: Date.now(),
+        type: 'credit',
+        title: 'Recharged via UPI / Netbanking',
+        amount: numAmount,
+        date: dateStr
+      });
+      await user.save();
+      return res.json({ success: true, walletBalance: user.walletBalance });
+    }
+
+    const user = inMemoryUsers.get(norm);
+    if (user) {
+      user.walletBalance = (user.walletBalance || 0) + numAmount;
+      user.walletHistory.unshift({
+        id: Date.now(),
+        type: 'credit',
+        title: 'Recharged via UPI / Netbanking',
+        amount: numAmount,
+        date: dateStr
+      });
+      return res.json({ success: true, walletBalance: user.walletBalance });
+    }
+
+    return res.status(404).json({ success: false, message: 'User not found' });
+  } catch (err) {
+    console.error('[Recharge Wallet Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to recharge wallet' });
+  }
+});
+
+// =============================================================================
+// HEALTH CHECK ENDPOINT (Useful for Render Web Service Monitoring)
+// =============================================================================
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'online',
+    appName: 'Sahoo Sweets Backend',
+    database: isDbConnected ? 'MongoDB (Connected)' : 'In-Memory DB (Active)',
+    timestamp: new Date().toISOString()
+  });
 });
 
 const PORT = process.env.PORT || 5000;
@@ -547,5 +1256,6 @@ app.listen(PORT, () => {
   console.log(`🚀 Sahoo Sweets Backend Server running on port ${PORT}`);
   console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔐 Admin PIN:    ${ADMIN_ACCESS_PIN}`);
+  console.log(`🌐 Health Check: http://localhost:${PORT}/api/health`);
   console.log(`======================================================\n`);
 });

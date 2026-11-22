@@ -11,6 +11,19 @@ import VegBadge from '../components/VegBadge';
 import CheckoutModal from '../components/CheckoutModal';
 import LiveTrackingModal from '../components/LiveTrackingModal';
 import RatingModal from '../components/RatingModal';
+import {
+  getSweetsMenu,
+  toggleMenuItemStockApi,
+  fetchOrdersApi,
+  createOrderApi,
+  updateOrderStatusApi,
+  cancelOrderApi,
+  rateOrderApi,
+  fetchUserProfileApi,
+  updateUserProfileApi,
+  convertRewardsApi,
+  rechargeWalletApi
+} from '../services/api';
 
 interface DashboardProps {
   userRole?: 'customer' | 'admin';
@@ -189,6 +202,57 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
     try { localStorage.setItem('sahooOutOfStockItems', JSON.stringify(outOfStockItems)); } catch {}
   }, [outOfStockItems]);
 
+  // Load data from Backend MongoDB APIs on mount (with safe local fallback)
+  useEffect(() => {
+    const currentIdentifier = localStorage.getItem('userPhone') || '9078699528';
+
+    // 1. Fetch User Profile
+    fetchUserProfileApi(currentIdentifier).then((profile: any) => {
+      if (profile) {
+        if (profile.name || profile.phone || profile.email) {
+          setUserProfile((prev: any) => ({
+            ...prev,
+            name: profile.name || prev?.name,
+            phone: profile.phone || prev?.phone,
+            email: profile.email || prev?.email
+          }));
+        }
+        if (Array.isArray(profile.addresses) && profile.addresses.length > 0) {
+          setAddressList(profile.addresses);
+        }
+        if (typeof profile.walletBalance === 'number') {
+          setSahooMoneyBalance(profile.walletBalance);
+        }
+        if (typeof profile.rewardPoints === 'number') {
+          setRewardPoints(profile.rewardPoints);
+        }
+        if (Array.isArray(profile.walletHistory) && profile.walletHistory.length > 0) {
+          setMoneyHistory(profile.walletHistory);
+        }
+        if (Array.isArray(profile.rewardsHistory) && profile.rewardsHistory.length > 0) {
+          setRewardsHistory(profile.rewardsHistory);
+        }
+      }
+    }).catch(() => {});
+
+    // 2. Fetch Orders
+    fetchOrdersApi(currentIdentifier, userRole).then((orders: any) => {
+      if (Array.isArray(orders) && orders.length > 0) {
+        setPastOrders(orders);
+      }
+    }).catch(() => {});
+
+    // 3. Fetch Menu & Stock Status
+    getSweetsMenu().then((items: any) => {
+      if (Array.isArray(items) && items.length > 0) {
+        const outOfStockIds = items.filter((it: any) => it.isAvailable === false).map((it: any) => it.id);
+        if (outOfStockIds.length > 0) {
+          setOutOfStockItems(outOfStockIds);
+        }
+      }
+    }).catch(() => {});
+  }, [userRole]);
+
   // Price-wise points calculation helper: 1 point for every ₹10
   const getItemPoints = (price: number): number => {
     return Math.max(1, Math.floor(price / 10));
@@ -220,6 +284,10 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
       ...(Array.isArray(prev) ? prev : [])
     ]);
 
+    // Async sync with Backend MongoDB
+    const currentId = localStorage.getItem('userPhone') || '9078699528';
+    convertRewardsApi(currentId, pts).catch(() => {});
+
     alert(`🎉 Success! ${pts} Partner Reward Points converted into ₹${moneyToAdd} Sahoo Money wallet cash!`);
   };
 
@@ -230,6 +298,11 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
       { id: Date.now(), type: 'credit', title: `Recharged via UPI / Netbanking`, amount, date: nowStr },
       ...(Array.isArray(prev) ? prev : [])
     ]);
+
+    // Async sync with Backend MongoDB
+    const currentId = localStorage.getItem('userPhone') || '9078699528';
+    rechargeWalletApi(currentId, amount).catch(() => {});
+
     alert(`₹${amount} added successfully to your Sahoo Money Wallet!`);
   };
 
@@ -257,6 +330,9 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
       const exists = prev.includes(id);
       return exists ? prev.filter(x => x !== id) : [...prev, id];
     });
+
+    // Async sync with Backend MongoDB
+    toggleMenuItemStockApi(id).catch(() => {});
   };
 
   const defaultAddrObj = (addressList || []).find((a: any) => a?.isDefault) || (addressList || [])[0] || {
@@ -388,6 +464,16 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
     e.preventDefault();
     setUserProfile((prev: any) => ({ ...prev, name: editName, phone: editPhone, email: editEmail }));
     setIsEditingAccount(false);
+
+    // Sync with backend MongoDB
+    const currentId = localStorage.getItem('userPhone') || '9078699528';
+    updateUserProfileApi({
+      identifier: currentId,
+      name: editName,
+      phone: editPhone,
+      email: editEmail
+    }).catch(() => {});
+
     alert('Account details updated successfully!');
   };
 
@@ -395,24 +481,35 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
   const cancelOrder = (orderId: string) => {
     setPastOrders((prev: any[]) => (prev || []).map((o: any) => {
       if (o.id === orderId) {
-        return { ...o, statusIndex: -1 };
+        return { ...o, statusIndex: -1, status: 'Cancelled' };
       }
       return o;
     }));
+
+    // Sync cancellation with backend MongoDB
+    cancelOrderApi(orderId, 'Cancelled by user').catch(() => {});
+
     alert(`Order #${orderId} has been cancelled successfully.`);
   };
 
   // Update order status (Admin & Tracking simulator)
   const handleUpdateOrderStatus = (orderId: string, newStatusIndex: number) => {
+    const steps = ["Order Confirmed", "Placed", "Shipped/Preparing", "Out for Delivery", "Delivered"];
+    const statusText = steps[newStatusIndex] || 'Delivered';
+
     setPastOrders((prev: any[]) => (prev || []).map((o: any) => {
       if (o.id === orderId) {
-        return { ...o, statusIndex: newStatusIndex };
+        return { ...o, statusIndex: newStatusIndex, status: statusText };
       }
       return o;
     }));
+
     if (activeTrackingOrder && activeTrackingOrder.id === orderId) {
-      setActiveTrackingOrder((prev: any) => ({ ...prev, statusIndex: newStatusIndex }));
+      setActiveTrackingOrder((prev: any) => ({ ...prev, statusIndex: newStatusIndex, status: statusText }));
     }
+
+    // Sync with backend MongoDB
+    updateOrderStatusApi(orderId, newStatusIndex, statusText).catch(() => {});
   };
 
   const handleReorder = (order: any) => {
@@ -465,11 +562,22 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
     setIsCartOpen(false);
     setActivePanel('orders'); // Jump directly to Order Tracking view
     setActiveTrackingOrder(newOrder); // Immediately launch live GPS tracking map
+
+    // Persist to Backend MongoDB
+    const currentId = localStorage.getItem('userPhone') || '9078699528';
+    createOrderApi({
+      ...newOrder,
+      userIdentifier: currentId
+    }).catch(() => {});
   };
 
   const handleRateOrderSubmit = (orderId: string, ratingVal: number, feedback: string) => {
     setPastOrders((prev: any[]) => (prev || []).map((o: any) => o.id === orderId ? { ...o, rating: ratingVal, feedback } : o));
     setRatingOrder(null);
+
+    // Sync rating with backend MongoDB
+    rateOrderApi(orderId, ratingVal, feedback).catch(() => {});
+
     alert('Thank you for your valuable feedback! 5 Partner Reward Points credited.');
     handleEarnRewardPoints(5);
   };
