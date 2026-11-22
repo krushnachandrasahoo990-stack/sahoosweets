@@ -636,6 +636,29 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                   <span>SEND 6-DIGIT OTP TO CONTACT ➔</span>
                 )}
               </button>
+
+              <div className="pt-1 text-center">
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-gray-300"></div>
+                  <span className="flex-shrink mx-2 text-[10px] text-gray-500 uppercase font-black">or instant demo</span>
+                  <div className="flex-grow border-t border-gray-300"></div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = loginId.trim() || 'krushnachandrasahoo990@gmail.com';
+                    localStorage.setItem('isAuthenticated', 'true');
+                    localStorage.setItem('userPhone', target);
+                    localStorage.setItem('userRole', loginRole);
+                    onLoginSuccess(loginRole);
+                  }}
+                  className="w-full mt-1 py-2.5 bg-black hover:bg-gray-800 text-amber-400 font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center space-x-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>⚡ 1-Click Instant Access ({loginRole === 'admin' ? 'Admin Portal' : 'Customer Store'})</span>
+                </button>
+              </div>
             </form>
 
             <p className="text-center text-xs text-gray-700 font-bold mt-5">
