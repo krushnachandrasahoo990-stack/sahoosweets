@@ -56,31 +56,11 @@ export const sendOtpApi = async (identifier, type = 'Login', role = 'customer', 
     const data = await response.json();
     return data;
   } catch (error) {
-    console.warn('[API Client] Backend offline. Running local fallback gateway...', error);
-
-    const norm = normalizeIdentifier(cleanId);
-    const isEmail = norm.includes('@');
-    const fallbackOtp = '123456';
-    const expiresAt = Date.now() + 5 * 60 * 1000;
-
-    localOtpStore.set(norm, {
-      otp: fallbackOtp,
-      expiresAt,
-      attempts: 0,
-      role: role || 'customer',
-      type
-    });
-
+    console.warn('[API Client] Backend offline or network error:', error);
     return {
-      success: true,
-      isLocalFallback: true,
-      message: isEmail
-        ? `OTP code dispatched to email: ${norm}`
-        : `SMS OTP code dispatched to mobile: +91 ${norm}`,
-      target: isEmail ? norm : `+91 ${norm}`,
-      identifierType: isEmail ? 'email' : 'phone',
-      expiresIn: 300,
-      cooldown: 60
+      success: false,
+      code: 'NETWORK_ERROR',
+      message: 'Unable to connect to the Sahoo Sweets backend server. Please check your backend connection or network.'
     };
   }
 };

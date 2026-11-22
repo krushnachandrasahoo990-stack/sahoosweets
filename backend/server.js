@@ -239,47 +239,78 @@ function isRateLimited(identifier) {
 // =============================================================================
 
 /**
- * Sends Email OTP via Nodemailer SMTP or Resend API
+ * Sends Email OTP branded under "Sahoo Sweets" via Nodemailer SMTP or Resend API
  */
 async function sendEmailOtp(email, otp, type = 'Login') {
-  const subject = `Your Sahoo Sweets Verification Code: ${otp}`;
+  const senderName = process.env.OTP_SENDER_NAME || 'Sahoo Sweets';
+  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+  const smtpHost = process.env.SMTP_HOST || process.env.EMAIL_HOST || 'smtp.gmail.com';
+  const smtpPort = Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 587;
+  const isSecure = process.env.SMTP_SECURE !== undefined 
+    ? (process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === true)
+    : (smtpPort === 465);
+
+  const subject = `Your Sahoo Sweets Login OTP: ${otp}`;
+  const fromHeader = process.env.MAIL_FROM || `"${senderName}" <${smtpUser || 'no-reply@sahoosweets.com'}>`;
+
   const htmlContent = `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="utf-8">
-      <title>Sahoo Sweets Verification Code</title>
+      <title>Your Sahoo Sweets Login OTP</title>
     </head>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8f6f0; margin: 0; padding: 24px;">
-      <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border: 2px solid #BBAB47; border-radius: 18px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
-        <div style="text-align: center; border-bottom: 2px dashed #f2c983; padding-bottom: 18px; margin-bottom: 24px;">
-          <h1 style="color: #1a1a1a; margin: 0; font-size: 24px; font-weight: 900; letter-spacing: 1px;">SAHOO SWEETS PURI</h1>
-          <p style="color: #8c7625; margin: 4px 0 0; font-size: 13px; font-weight: 700;">Traditional Sweets & Snacks Delivery</p>
+      <div style="max-width: 520px; margin: 0 auto; background-color: #ffffff; border: 2px solid #BBAB47; border-radius: 20px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+        <div style="text-align: center; border-bottom: 2px dashed #f2c983; padding-bottom: 20px; margin-bottom: 24px;">
+          <h1 style="color: #1a1a1a; margin: 0; font-size: 26px; font-weight: 900; letter-spacing: 1px;">SAHOO SWEETS</h1>
+          <p style="color: #8c7625; margin: 6px 0 0; font-size: 13px; font-weight: 700;">Traditional Sweets & Snacks Delivery • Grand Road, Puri</p>
         </div>
 
-        <p style="font-size: 15px; color: #333333; line-height: 1.5; margin-bottom: 16px;">
+        <p style="font-size: 15px; color: #333333; line-height: 1.5; margin-bottom: 12px;">
           Hello,
         </p>
         <p style="font-size: 14px; color: #555555; line-height: 1.5; margin-bottom: 20px;">
-          Use the following 6-digit One Time Password (OTP) to complete your <strong>${type}</strong> verification. This code is valid for <strong>5 minutes</strong>.
+          Use the following 6-digit One-Time Password (OTP) to complete your <strong>${type}</strong> for <strong>Sahoo Sweets</strong>. This verification code is valid for <strong>5 minutes</strong>.
         </p>
 
-        <div style="background-color: #fcf9eb; border: 2px solid #BBAB47; border-radius: 14px; padding: 20px; text-align: center; margin-bottom: 24px;">
-          <span style="font-size: 32px; font-weight: 900; letter-spacing: 8px; color: #1a1a1a; font-family: monospace;">
+        <div style="background-color: #fcf9eb; border: 2px solid #BBAB47; border-radius: 14px; padding: 22px; text-align: center; margin-bottom: 24px;">
+          <div style="font-size: 12px; font-weight: 800; color: #8c7625; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px;">
+            Your Login OTP Code
+          </div>
+          <span style="font-size: 36px; font-weight: 900; letter-spacing: 10px; color: #1a1a1a; font-family: monospace; display: inline-block;">
             ${otp}
           </span>
+          <div style="font-size: 11px; color: #777777; margin-top: 8px;">
+            Valid for 5 minutes only
+          </div>
         </div>
 
-        <p style="font-size: 12px; color: #777777; margin-bottom: 8px;">
-          <strong>Security Notice:</strong> Never share this OTP with anyone, including Sahoo Sweets staff. Our team will never ask for your code.
+        <div style="background-color: #fff9e6; border-left: 4px solid #BBAB47; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;">
+          <p style="font-size: 12px; color: #7a6116; margin: 0; line-height: 1.5;">
+            <strong>Security Notice:</strong> Never share this OTP with anyone, including Sahoo Sweets delivery partners or staff. We will never ask for your code.
+          </p>
+        </div>
+
+        <p style="font-size: 11px; color: #888888; line-height: 1.4; margin-bottom: 20px;">
+          * If you don't see this email in your inbox, please check your <strong>Spam or Junk folder</strong> and mark it as safe.
         </p>
-        <p style="font-size: 12px; color: #999999; margin: 0; border-top: 1px solid #eeeeee; padding-top: 16px; text-align: center;">
-          Grand Road, Puri, Odisha • Delivery Helpline: +91 9078699528
-        </p>
+
+        <div style="border-top: 1px solid #eeeeee; padding-top: 18px; text-align: center;">
+          <p style="font-size: 12px; font-weight: 800; color: #333333; margin: 0 0 4px;">
+            Sahoo Sweets • Grand Road, Near Jagannath Temple, Puri, Odisha - 752001
+          </p>
+          <p style="font-size: 11px; color: #999999; margin: 0;">
+            Delivery Helpline: +91 9078699528 • krushnachandrasahoo990@gmail.com
+          </p>
+        </div>
       </div>
     </body>
     </html>
   `;
+
+  const textContent = `SAHOO SWEETS - LOGIN OTP\n\nYour 6-digit verification code is: ${otp}\n\nThis OTP is valid for 5 minutes. Please do not share it with anyone.\nIf not found in your primary inbox, please check your Spam / Junk folder.\n\nSahoo Sweets, Grand Road, Puri, Odisha\nDelivery Helpline: +91 9078699528`;
 
   // Option 1: Resend API (HTTP API)
   if (process.env.RESEND_API_KEY) {
@@ -291,60 +322,84 @@ async function sendEmailOtp(email, otp, type = 'Login') {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          from: process.env.RESEND_FROM || process.env.MAIL_FROM || 'Sahoo Sweets <onboarding@resend.dev>',
+          from: process.env.RESEND_FROM || fromHeader,
           to: email,
           subject,
+          text: textContent,
           html: htmlContent
         })
       });
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Resend API rejected dispatch');
+      }
       console.log(`[Email Gateway - Resend] Dispatched to ${email}. ID:`, data.id || 'ok');
-      return { success: true, provider: 'resend', id: data.id };
+      return { 
+        success: true, 
+        provider: 'resend', 
+        id: data.id,
+        message: `OTP sent under "${senderName}" to ${email}. Please check your Inbox and Spam/Junk folder.`
+      };
     } catch (err) {
       console.error('[Email Gateway Error - Resend]:', err);
     }
   }
 
   // Option 2: Nodemailer (SMTP / Gmail App Password)
-  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
-  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
-  if (nodemailer && smtpUser && smtpPass) {
-    try {
-      const transporter = nodemailer.createTransport({
-        service: process.env.EMAIL_SERVICE || 'gmail',
-        host: process.env.SMTP_HOST || process.env.EMAIL_HOST || 'smtp.gmail.com',
-        port: Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 587,
-        secure: process.env.EMAIL_SECURE === 'true',
-        auth: {
-          user: smtpUser,
-          pass: smtpPass
-        }
-      });
-
-      const info = await transporter.sendMail({
-        from: process.env.MAIL_FROM || process.env.EMAIL_FROM || `"Sahoo Sweets" <${smtpUser}>`,
-        to: email,
-        subject,
-        html: htmlContent
-      });
-
-      console.log(`[Email Gateway - Nodemailer] Dispatched to ${email}. MessageId:`, info.messageId);
-      return { success: true, provider: 'nodemailer', id: info.messageId };
-    } catch (err) {
-      console.error('[Email Gateway Error - Nodemailer]:', err);
-    }
+  if (!nodemailer) {
+    return {
+      success: false,
+      code: 'EMAIL_MODULE_MISSING',
+      message: 'Email module (nodemailer) is not installed on the server.'
+    };
   }
 
-  // Option 3: Development / Fallback Console Logging (Zero client exposure)
-  console.log(`\n======================================================`);
-  console.log(`📧 [EMAIL OTP DISPATCH LOG - SERVER CONSOLE ONLY]`);
-  console.log(`To:       ${email}`);
-  console.log(`Subject:  ${subject}`);
-  console.log(`OTP Code: ${otp}`);
-  console.log(`Validity: 5 Minutes (Resend Cooldown: 60 Seconds)`);
-  console.log(`Note:     Configure SMTP_USER/SMTP_PASS or RESEND_API_KEY in .env for live email`);
-  console.log(`======================================================\n`);
-  return { success: true, provider: 'dev-console', simulated: true };
+  if (!smtpUser || !smtpPass) {
+    console.warn(`[Email Gateway] SMTP credentials missing in backend/.env (SMTP_USER=${smtpUser || 'MISSING'}, SMTP_PASS=${smtpPass ? 'SET' : 'MISSING'}).`);
+    return {
+      success: false,
+      code: 'EMAIL_CONFIG_MISSING',
+      message: `Email OTP service is not configured on the server. Please add your 16-character Gmail App Password to SMTP_PASS in backend/.env for ${smtpUser || 'your email'} to send live branded OTP emails.`
+    };
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: isSecure,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+
+    const info = await transporter.sendMail({
+      from: fromHeader,
+      to: email,
+      subject,
+      text: textContent,
+      html: htmlContent
+    });
+
+    console.log(`[Email Gateway - Nodemailer] Dispatched branded OTP to ${email}. MessageId:`, info.messageId);
+    return { 
+      success: true, 
+      provider: 'nodemailer', 
+      id: info.messageId,
+      message: `OTP sent under "${senderName}" to ${email}. Please check your Inbox and Spam/Junk folder.` 
+    };
+  } catch (err) {
+    console.error('[Email Gateway Error - Nodemailer]:', err);
+    return {
+      success: false,
+      code: 'EMAIL_SEND_FAILED',
+      message: `SMTP Email delivery failed: ${err.message || 'Authentication error'}. Please check your SMTP_USER and Gmail App Password in backend/.env.`
+    };
+  }
 }
 
 /**
@@ -375,10 +430,24 @@ async function sendSmsOtp(phoneNumber, otp) {
       });
 
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Twilio SMS failed');
+      }
       console.log(`[SMS Gateway - Twilio] Dispatched to +91 ${phoneNumber}. SID:`, data.sid);
-      return { success: true, provider: 'twilio', sid: data.sid };
+      return { 
+        success: true, 
+        provider: 'twilio', 
+        sid: data.sid,
+        message: `OTP sent via SMS to mobile: +91 ${phoneNumber}.`
+      };
     } catch (err) {
       console.error('[SMS Gateway Error - Twilio]:', err);
+      return {
+        success: false,
+        code: 'SMS_SEND_FAILED',
+        canSwitchToEmail: true,
+        message: `Twilio SMS delivery failed: ${err.message}. Please switch to Email OTP.`
+      };
     }
   }
 
@@ -399,10 +468,24 @@ async function sendSmsOtp(phoneNumber, otp) {
         })
       });
       const data = await response.json();
+      if (!response.ok || !data.return) {
+        throw new Error(data.message || 'Fast2SMS returned error');
+      }
       console.log(`[SMS Gateway - Fast2SMS] Dispatched to +91 ${phoneNumber}:`, data);
-      return { success: true, provider: 'fast2sms', data };
+      return { 
+        success: true, 
+        provider: 'fast2sms', 
+        data,
+        message: `OTP sent via SMS to mobile: +91 ${phoneNumber}.`
+      };
     } catch (err) {
       console.error('[SMS Gateway Error - Fast2SMS]:', err);
+      return {
+        success: false,
+        code: 'SMS_SEND_FAILED',
+        canSwitchToEmail: true,
+        message: `Fast2SMS delivery failed: ${err.message}. Please switch to Email OTP.`
+      };
     }
   }
 
@@ -413,23 +496,35 @@ async function sendSmsOtp(phoneNumber, otp) {
       const url = `https://control.msg91.com/api/v5/otp?template_id=${templateId}&mobile=91${phoneNumber}&authkey=${process.env.MSG91_AUTH_KEY}&otp=${otp}`;
       const response = await fetch(url, { method: 'POST' });
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'MSG91 returned error');
+      }
       console.log(`[SMS Gateway - MSG91] Dispatched to +91 ${phoneNumber}:`, data);
-      return { success: true, provider: 'msg91', data };
+      return { 
+        success: true, 
+        provider: 'msg91', 
+        data,
+        message: `OTP sent via SMS to mobile: +91 ${phoneNumber}.`
+      };
     } catch (err) {
       console.error('[SMS Gateway Error - MSG91]:', err);
+      return {
+        success: false,
+        code: 'SMS_SEND_FAILED',
+        canSwitchToEmail: true,
+        message: `MSG91 SMS delivery failed: ${err.message}. Please switch to Email OTP.`
+      };
     }
   }
 
-  // Option 4: Development / Fallback Console Logging (Zero client exposure)
-  console.log(`\n======================================================`);
-  console.log(`📱 [INDIAN SMS OTP DISPATCH LOG - SERVER CONSOLE ONLY]`);
-  console.log(`Recipient: +91 ${phoneNumber}`);
-  console.log(`Message:   Your Sahoo Sweets verification code is ${otp}. Valid for 5 minutes.`);
-  console.log(`OTP Code:  ${otp}`);
-  console.log(`Validity: 5 Minutes (Resend Cooldown: 60 Seconds)`);
-  console.log(`Note:      Configure TWILIO_SID/TWILIO_AUTH_TOKEN or FAST2SMS_API_KEY in .env for live SMS`);
-  console.log(`======================================================\n`);
-  return { success: true, provider: 'dev-console', simulated: true };
+  // No SMS provider configured
+  console.warn(`[SMS Gateway] No SMS provider configured in backend/.env (TWILIO_*, FAST2SMS_*, MSG91_*).`);
+  return {
+    success: false,
+    code: 'SMS_GATEWAY_NOT_CONFIGURED',
+    canSwitchToEmail: true,
+    message: 'Mobile SMS gateway is not configured on the server. Please switch to Email OTP (which sends directly under "Sahoo Sweets") to receive your verification code.'
+  };
 }
 
 // =============================================================================
@@ -502,7 +597,25 @@ const handleSendOtp = async (req, res) => {
     const otp = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = new Date(now + 5 * 60 * 1000);
 
-    // Save to Database or Memory Store
+    // Real Delivery Trigger (Email vs Indian SMS)
+    let deliveryResult;
+    if (identifierType === 'email') {
+      deliveryResult = await sendEmailOtp(normalized, otp, type);
+    } else {
+      deliveryResult = await sendSmsOtp(normalized, otp);
+    }
+
+    // IF DELIVERY FAILED: DO NOT PRETEND SUCCESS AND DO NOT STORE UN-SENT OTP RECORD
+    if (!deliveryResult || !deliveryResult.success) {
+      return res.status(400).json({
+        success: false,
+        code: deliveryResult?.code || 'DELIVERY_FAILED',
+        canSwitchToEmail: deliveryResult?.canSwitchToEmail || (identifierType === 'phone'),
+        message: deliveryResult?.message || 'Failed to dispatch OTP. Please check your credentials or switch to Email OTP.'
+      });
+    }
+
+    // Save to Database or Memory Store ONLY IF DELIVERY ACTUALLY SUCCEEDED!
     if (isDbConnected) {
       await OtpSession.deleteMany({ identifier: normalized });
       await OtpSession.create({
@@ -526,20 +639,12 @@ const handleSendOtp = async (req, res) => {
       });
     }
 
-    // Real Delivery Trigger (Email vs Indian SMS)
-    let deliveryResult;
-    if (identifierType === 'email') {
-      deliveryResult = await sendEmailOtp(normalized, otp, type);
-    } else {
-      deliveryResult = await sendSmsOtp(normalized, otp);
-    }
-
     // ZERO EXPOSURE: OTP is NEVER sent in response JSON
     return res.status(200).json({
       success: true,
-      message: identifierType === 'email'
-        ? `OTP code sent successfully to email: ${display}`
-        : `OTP code sent via SMS to mobile: ${display}`,
+      message: deliveryResult.message || (identifierType === 'email'
+        ? `OTP code sent under "Sahoo Sweets" to email: ${display}. Please check your Inbox and Spam/Junk folder.`
+        : `OTP code sent via SMS to mobile: ${display}`),
       target: display,
       identifierType,
       expiresIn: 300,

@@ -33,6 +33,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
   // Loading & error states
   const [loginError, setLoginError] = useState('');
+  const [canSwitchToEmail, setCanSwitchToEmail] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
 
   // OTP states (6-Digit OTP)
@@ -95,10 +96,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    setCanSwitchToEmail(false);
 
     const parsed = parseIdentifier(loginId);
     if (!parsed) {
-      setLoginError('✕ Please enter a valid 10-digit Indian Mobile (+91) or Email Address.');
+      setLoginError('✕ Please enter a valid Email Address or 10-digit Indian Mobile (+91).');
       return;
     }
 
@@ -117,16 +119,17 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    setCanSwitchToEmail(false);
 
     if (signupPassword !== confirmPassword) {
       alert('Passwords do not match!');
       return;
     }
 
-    const target = signupPhone.trim() || signupEmail.trim();
+    const target = signupEmail.trim() || signupPhone.trim();
     const parsed = parseIdentifier(target);
     if (!parsed) {
-      alert('Please enter a valid 10-digit Indian mobile number or email address!');
+      alert('Please enter a valid email address or 10-digit Indian mobile number!');
       return;
     }
 
@@ -142,27 +145,32 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   ) => {
     const activeRole = overrideRole || loginRole;
     const pin = overridePin || adminPin;
-    const target = overrideTarget || loginId.trim() || signupPhone.trim() || signupEmail.trim();
+    const target = overrideTarget || loginId.trim() || signupEmail.trim() || signupPhone.trim();
 
     const parsed = parseIdentifier(target);
     if (!parsed) {
-      setLoginError('✕ Please enter a valid 10-digit Indian Mobile (+91) or Email Address.');
+      setLoginError('✕ Please enter a valid Email Address or 10-digit Indian Mobile (+91).');
       return;
     }
 
     setIsSendingOtp(true);
     setLoginError('');
+    setCanSwitchToEmail(false);
 
     try {
       const res = await sendOtpApi(parsed.normalized, type, activeRole, pin);
 
       if (!res.success) {
         setLoginError(res.message || 'Failed to dispatch OTP. Please check your details.');
+        if (res.canSwitchToEmail || res.code === 'SMS_GATEWAY_NOT_CONFIGURED' || parsed.type === 'phone') {
+          setCanSwitchToEmail(true);
+        }
         setIsSendingOtp(false);
         return;
       }
 
       // Success: advance to OTP view
+      setCanSwitchToEmail(false);
       setAuthType(type);
       setStep('otp');
       setDeliveryTarget(res.target || parsed.display);
@@ -171,7 +179,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       setVerifyError('');
       setTimer(res.cooldown || 60);
     } catch {
-      setLoginError('Network error connecting to OTP gateway. Please retry.');
+      setLoginError('Network error connecting to Sahoo Sweets OTP gateway. Please retry.');
     } finally {
       setIsSendingOtp(false);
     }
@@ -225,7 +233,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setIsVerifying(true);
     setVerifyError('');
 
-    const target = deliveryTarget || loginId.trim() || signupPhone.trim() || signupEmail.trim();
+    const target = deliveryTarget || loginId.trim() || signupEmail.trim() || signupPhone.trim();
 
     try {
       const res = await verifyOtpApi(target, fullEnteredOtp);
@@ -294,8 +302,31 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 {deliveryType === 'email' ? <Mail className="w-3.5 h-3.5 text-amber-800 shrink-0" /> : <Smartphone className="w-3.5 h-3.5 text-amber-800 shrink-0" />}
                 <span className="text-xs font-black text-gray-900">{deliveryTarget}</span>
               </div>
-              <p className="text-[11px] text-gray-500 font-medium">Valid for 5 minutes. Check your inbox or SMS messages.</p>
+              <p className="text-[11px] text-gray-500 font-medium">Valid for 5 minutes.</p>
             </div>
+
+            {/* Branded Delivery & Spam Guidance Notice */}
+            {deliveryType === 'email' ? (
+              <div className="mt-3 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-left space-y-1.5 animate-fadeIn">
+                <div className="flex items-center space-x-1.5 text-xs font-black text-emerald-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Branded Email Sent from "Sahoo Sweets"</span>
+                </div>
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  📬 <strong>Inbox & Spam Notice:</strong> Your 6-digit code was dispatched from <strong>"Sahoo Sweets"</strong>. If not visible in your Primary Inbox, please check your <strong>Spam / Junk folder</strong> and mark it as safe.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-2xl text-left space-y-1 animate-fadeIn">
+                <div className="flex items-center space-x-1.5 text-xs font-black text-amber-900">
+                  <Smartphone className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span>SMS OTP Dispatched to Mobile</span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Please check your phone's SMS inbox for your 6-digit verification code.
+                </p>
+              </div>
+            )}
 
             {verifyError && (
               <div className="mt-3.5 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5">
@@ -375,25 +406,29 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         <div className="mb-3 bg-white/95 backdrop-blur-md rounded-2xl p-2.5 border border-amber-300 shadow-xl flex items-center justify-between text-xs font-black">
           <span className="text-[11px] text-gray-700 flex items-center space-x-1">
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Select Role:</span>
+            <span>Quick Fill:</span>
           </span>
           <div className="flex space-x-1.5">
             <button
               type="button"
               onClick={() => {
                 setLoginRole('customer');
-                setLoginId('9078699528');
+                setLoginId('krushnachandrasahoo990@gmail.com');
+                setLoginError('');
+                setCanSwitchToEmail(false);
               }}
               className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[10px] font-black transition cursor-pointer"
             >
-              🛍️ Customer
+              🛍️ Email OTP
             </button>
             <button
               type="button"
               onClick={() => {
                 setLoginRole('admin');
-                setLoginId('9078699528');
+                setLoginId('krushnachandrasahoo990@gmail.com');
                 setAdminPin('9900');
+                setLoginError('');
+                setCanSwitchToEmail(false);
               }}
               className="px-2.5 py-1 bg-black hover:bg-gray-800 text-amber-400 rounded-lg text-[10px] font-black transition cursor-pointer"
             >
@@ -413,7 +448,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
             <div className="text-center mb-4">
               <h2 className="text-2xl font-black text-gray-900">Sign In with OTP</h2>
-              <p className="text-xs font-semibold mt-0.5 text-gray-600">Enter Indian Phone (+91) or Email Address</p>
+              <p className="text-xs font-semibold mt-0.5 text-gray-600">Enter Email Address or Indian Phone (+91)</p>
             </div>
 
             {/* ROLE SELECTOR TABS */}
@@ -443,7 +478,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-black text-gray-800 uppercase">
-                    {loginRole === 'admin' ? 'Admin Phone / Email' : 'Phone (+91) or Email Address'}
+                    {loginRole === 'admin' ? 'Admin Email / Phone' : 'Email Address (Recommended) or Phone'}
                   </label>
 
                   {/* Real-time Detection Badge */}
@@ -470,19 +505,44 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                     )}
                   </span>
                   <input 
+                    id="login-identifier-input"
                     type="text" 
                     value={loginId}
                     onChange={(e) => {
                       setLoginId(e.target.value);
                       if (loginError) setLoginError('');
+                      if (canSwitchToEmail) setCanSwitchToEmail(false);
                     }}
                     required 
-                    placeholder={loginRole === 'admin' ? "9078699528 or admin@sahoosweets.com" : "e.g. 9078699528 or user@gmail.com"} 
+                    placeholder="Enter email (e.g. user@gmail.com) or phone" 
                     className="w-full pl-10 pr-4 py-2.5 border rounded-xl text-xs font-black text-black placeholder-gray-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
                     style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}
                   />
                 </div>
-                {loginError && <p className="text-[11px] font-black text-rose-600 mt-1">{loginError}</p>}
+
+                {/* Explicit Error Feedback & Switch to Email OTP Action */}
+                {loginError && (
+                  <div className="mt-2 p-3 bg-rose-50 border border-rose-300 rounded-xl space-y-2 animate-fadeIn text-left">
+                    <div className="flex items-start space-x-2">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <p className="text-[11px] font-bold text-rose-800 leading-relaxed">{loginError}</p>
+                    </div>
+                    {canSwitchToEmail && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginId('krushnachandrasahoo990@gmail.com');
+                          setLoginError('');
+                          setCanSwitchToEmail(false);
+                        }}
+                        className="w-full py-2 px-3 bg-black hover:bg-gray-800 text-amber-400 font-black rounded-lg text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer shadow-sm"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Switch to Email OTP ("Sahoo Sweets") ➔</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* ADMIN ACCESS PIN (Only required & displayed for Admin Role) */}
@@ -579,12 +639,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <input type="text" value={signupName} onChange={e => setSignupName(e.target.value)} required placeholder="Krushna Chandra Sahoo" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-black uppercase">Phone Number (+91) *</label>
-                <input type="tel" maxLength={10} value={signupPhone} onChange={e => setSignupPhone(e.target.value)} required placeholder="9078699528" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
+                <label className="block text-[10px] font-black text-black uppercase">Email Address (Recommended) *</label>
+                <input type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} required placeholder="krushnachandrasahoo990@gmail.com" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-black uppercase">Email (Optional)</label>
-                <input type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} placeholder="email@gmail.com" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
+                <label className="block text-[10px] font-black text-black uppercase">Phone Number (+91)</label>
+                <input type="tel" maxLength={10} value={signupPhone} onChange={e => setSignupPhone(e.target.value)} placeholder="9078699528" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
               </div>
               
               <div>
