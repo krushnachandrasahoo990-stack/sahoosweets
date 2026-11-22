@@ -34,6 +34,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   // Loading & error states
   const [loginError, setLoginError] = useState('');
   const [canSwitchToEmail, setCanSwitchToEmail] = useState(false);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
 
   // OTP states (6-Digit OTP)
@@ -171,6 +172,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
       // Success: advance to OTP view
       setCanSwitchToEmail(false);
+      setIsOfflineMode(!!res.isLocalFallback);
       setAuthType(type);
       setStep('otp');
       setDeliveryTarget(res.target || parsed.display);
@@ -305,8 +307,28 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               <p className="text-[11px] text-gray-500 font-medium">Valid for 5 minutes.</p>
             </div>
 
-            {/* Branded Delivery & Spam Guidance Notice */}
-            {deliveryType === 'email' ? (
+            {/* Branded Delivery, Spam Guidance, or Offline Test Mode Notice */}
+            {isOfflineMode ? (
+              <div className="mt-3 p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-left space-y-2 animate-fadeIn">
+                <div className="flex items-center space-x-1.5 text-xs font-black text-amber-950">
+                  <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span>Offline Test Mode Active (Backend server offline)</span>
+                </div>
+                <p className="text-[11px] text-amber-900 leading-relaxed">
+                  Backend server on port 5000 is not running. You can explore and test all features using test OTP <strong className="font-mono bg-amber-200 px-1.5 py-0.5 rounded text-black font-black">123456</strong>.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOtpDigits(['1', '2', '3', '4', '5', '6']);
+                    setVerifyError('');
+                  }}
+                  className="w-full py-2 bg-black hover:bg-gray-800 text-amber-400 text-xs font-black rounded-xl transition cursor-pointer shadow-sm flex items-center justify-center space-x-1"
+                >
+                  <span>⚡ Auto-Fill Test Code (123456)</span>
+                </button>
+              </div>
+            ) : deliveryType === 'email' ? (
               <div className="mt-3 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-left space-y-1.5 animate-fadeIn">
                 <div className="flex items-center space-x-1.5 text-xs font-black text-emerald-900">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
