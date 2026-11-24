@@ -82,8 +82,8 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
       if (saved) return JSON.parse(saved);
     } catch {}
     return [
-      { id: 1, name: "Krushna Chandra Sahoo", phone: "9078699528", address: "At/Po - Nagapur, Brahmagiri Road", city: "Puri", state: "Odisha", pin: "752001", isDefault: true },
-      { id: 2, name: "Sahoo Sweets Counter", phone: "9078699528", address: "Grand Road, Near Jagannath Temple", city: "Puri", state: "Odisha", pin: "752001", isDefault: false }
+      { id: 1, name: "Krushna Chandra Sahoo", phone: "8763332962", address: "Nagapur, Near Punjab National Bank", city: "Gop, Puri", state: "Odisha", pin: "752110", isDefault: true },
+      { id: 2, name: "Sahoo Sweets Counter", phone: "8763332962", address: "Nagapur, Near Punjab National Bank, Gop, Puri", city: "Puri", state: "Odisha", pin: "752110", isDefault: false }
     ];
   });
 
@@ -94,23 +94,23 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
     } catch {}
     return {
       name: "Krushna Chandra Sahoo",
-      phone: "9078699528",
-      email: "krushnachandrasahoo990@gmail.com"
+      phone: "8763332962",
+      email: "noreply@sahoosweets.in"
     };
   });
 
   const [isEditingAccount, setIsEditingAccount] = useState(false);
   const [editName, setEditName] = useState(userProfile?.name || 'Krushna Chandra Sahoo');
-  const [editPhone, setEditPhone] = useState(userProfile?.phone || '9078699528');
-  const [editEmail, setEditEmail] = useState(userProfile?.email || 'krushnachandrasahoo990@gmail.com');
+  const [editPhone, setEditPhone] = useState(userProfile?.phone || '8763332962');
+  const [editEmail, setEditEmail] = useState(userProfile?.email || 'noreply@sahoosweets.in');
 
   const [showAddAddressModal, setShowAddAddressModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newAddr, setNewAddr] = useState('');
-  const [newCity, setNewCity] = useState('Puri');
+  const [newCity, setNewCity] = useState('Gop, Puri');
   const [newState, setNewState] = useState('Odisha');
-  const [newPin, setNewPin] = useState('752001');
+  const [newPin, setNewPin] = useState('752110');
 
   // Past orders with step-by-step timeline: Order Confirmed -> Placed -> Preparing/Shipped -> Out for Delivery -> Delivered
   const [pastOrders, setPastOrders] = useState<any[]>(() => {
@@ -130,7 +130,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
         statusIndex: 3, 
         steps: ["Order Confirmed", "Placed", "Shipped/Preparing", "Out for Delivery", "Delivered"],
         payment: "Cash on Delivery",
-        address: "At/Po - Nagapur, Brahmagiri Road, Puri, Odisha - 752001"
+        address: "Nagapur, Near Punjab National Bank, Gop, Puri"
       }
     ];
   });
@@ -204,7 +204,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
 
   // Load data from Backend MongoDB APIs on mount (with safe local fallback)
   useEffect(() => {
-    const currentIdentifier = localStorage.getItem('userPhone') || '9078699528';
+    const currentIdentifier = localStorage.getItem('userPhone') || '8763332962';
 
     // 1. Fetch User Profile
     fetchUserProfileApi(currentIdentifier).then((profile: any) => {
@@ -285,7 +285,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
     ]);
 
     // Async sync with Backend MongoDB
-    const currentId = localStorage.getItem('userPhone') || '9078699528';
+    const currentId = localStorage.getItem('userPhone') || '8763332962';
     convertRewardsApi(currentId, pts).catch(() => {});
 
     alert(`🎉 Success! ${pts} Partner Reward Points converted into ₹${moneyToAdd} Sahoo Money wallet cash!`);
@@ -300,7 +300,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
     ]);
 
     // Async sync with Backend MongoDB
-    const currentId = localStorage.getItem('userPhone') || '9078699528';
+    const currentId = localStorage.getItem('userPhone') || '8763332962';
     rechargeWalletApi(currentId, amount).catch(() => {});
 
     alert(`₹${amount} added successfully to your Sahoo Money Wallet!`);
@@ -336,9 +336,9 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
   };
 
   const defaultAddrObj = (addressList || []).find((a: any) => a?.isDefault) || (addressList || [])[0] || {
-    id: 1, name: "Krushna Chandra Sahoo", phone: "9078699528", address: "At/Po - Nagapur", city: "Puri", pin: "752001"
+    id: 1, name: "Krushna Chandra Sahoo", phone: "8763332962", address: "Nagapur, Near Punjab National Bank, Gop, Puri", city: "Puri", pin: "752110"
   };
-  const currentHeaderAddressString = defaultAddrObj ? `${defaultAddrObj.address}, ${defaultAddrObj.city} - ${defaultAddrObj.pin}` : "At/Po - Nagapur, Puri - 752001";
+  const currentHeaderAddressString = defaultAddrObj ? `${defaultAddrObj.address}, ${defaultAddrObj.city}` : "Nagapur, Near Punjab National Bank, Gop, Puri";
 
   const [selectedVariants, setSelectedVariants] = useState<{[key: string]: number}>(() => {
     const init: {[key: string]: number} = {};
@@ -466,7 +466,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
     setIsEditingAccount(false);
 
     // Sync with backend MongoDB
-    const currentId = localStorage.getItem('userPhone') || '9078699528';
+    const currentId = localStorage.getItem('userPhone') || '8763332962';
     updateUserProfileApi({
       identifier: currentId,
       name: editName,
@@ -564,7 +564,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
     setActiveTrackingOrder(newOrder); // Immediately launch live GPS tracking map
 
     // Persist to Backend MongoDB
-    const currentId = localStorage.getItem('userPhone') || '9078699528';
+    const currentId = localStorage.getItem('userPhone') || '8763332962';
     createOrderApi({
       ...newOrder,
       userIdentifier: currentId
@@ -872,7 +872,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
                       <span className="px-2.5 py-0.5 bg-amber-500 text-black text-[10px] font-black uppercase rounded-md">
                         Store Operations
                       </span>
-                      <span className="text-xs text-gray-400">At/Po - Nagapur, Puri</span>
+                      <span className="text-xs text-gray-400">Nagapur, Near Punjab National Bank, Gop, Puri</span>
                     </div>
                     <h2 className="text-2xl sm:text-3xl font-black text-amber-400">Admin Control Center</h2>
                     <p className="text-xs text-gray-300">Live order status updater, delivery dispatch & kitchen stock controller</p>
@@ -1663,7 +1663,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
                       <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black text-xs">GPay</div>
                       <div>
                         <h4 className="text-xs font-black text-gray-900">Google Pay (GPay)</h4>
-                        <p className="text-[10px] text-gray-500 font-mono">9078699528@oksbi</p>
+                        <p className="text-[10px] text-gray-500 font-mono">8763332962@oksbi</p>
                       </div>
                     </div>
                     <span className="text-xs font-bold text-emerald-600">Verified ✓</span>
@@ -1674,7 +1674,7 @@ export default function Dashboard({ userRole = 'customer', onLogout, onSwitchRol
                       <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-black text-xs">PhonePe</div>
                       <div>
                         <h4 className="text-xs font-black text-gray-900">PhonePe UPI</h4>
-                        <p className="text-[10px] text-gray-500 font-mono">9078699528@ybl</p>
+                        <p className="text-[10px] text-gray-500 font-mono">8763332962@ybl</p>
                       </div>
                     </div>
                     <span className="text-xs font-bold text-emerald-600">Verified ✓</span>

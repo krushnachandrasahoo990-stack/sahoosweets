@@ -2,8 +2,89 @@
 // SAHOO SWEETS - FRONTEND API CLIENT & OFFLINE SAFETY GATEWAY
 // =============================================================================
 
-// Dynamic Backend URL: Reads VITE_API_URL on Render/Vercel or defaults to localhost:5000
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+/**
+ * Resolves the backend API base URL cleanly:
+ * 1. Checks explicit environment variables: VITE_API_URL, VITE_BACKEND_URL, or VITE_API_BASE_URL
+ * 2. In browser on non-localhost (Vercel production/preview): defaults to https://sahoosweets.onrender.com
+ * 3. In Vite production build: NEVER points to localhost
+ * 4. In local development on localhost/127.0.0.1: defaults to http://localhost:5000
+ * 5. Sanitizes and normalizes to guarantee clean /api prefix without double-slashes (//)
+ */
+export const getApiBaseUrl = () => {
+  let envUrl = 
+    import.meta.env.VITE_API_URL || 
+    import.meta.env.VITE_BACKEND_URL || 
+    import.meta.env.VITE_API_BASE_URL;
+
+  let base = '';
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    base = envUrl.trim().replace(/\/+$/, '');
+  } else if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname.endsWith('.local');
+    if (!isLocalhost) {
+      base = 'https://sahoosweets.onrender.com';
+    }
+  }
+
+  // Production build safety fallback
+  if (!base && import.meta.env.PROD) {
+    base = 'https://sahoosweets.onrender.com';
+  }
+
+  // Local development fallback
+  if (!base) {
+    base = 'http://localhost:5000';
+  }
+
+  // Normalize: remove any trailing slashes and ensure exactly one /api suffix
+  base = base.replace(/\/+$/, '');
+  return base.endsWith('/api') ? base : `${base}/api`;
+};
+
+export const API_URL = getApiBaseUrl();
+
+/**
+ * Builds an absolute API URL with guaranteed clean path formatting (no double-slashes, proper /api prefix)
+ */
+export const buildApiUrl = (endpoint = '') => {
+  const base = getApiBaseUrl().replace(/\/+$/, '');
+  if (!endpoint) return base;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return `${base}${cleanEndpoint}`;
+};
+
+/**
+ * Fetch wrapper with at least 65-second timeout to handle Render free-tier cold starts
+ */
+export const fetchWithTimeout = async (url, options = {}, timeoutMs = 65000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      const timeoutError = new Error(
+        'The Sahoo Sweets backend server is waking up from sleep mode (Render free-tier cold start, ~30-60s). Please wait a few seconds and retry.'
+      );
+      timeoutError.isTimeout = true;
+      throw timeoutError;
+    }
+    const netError = new Error(
+      error.message || 'Unable to connect to the Sahoo Sweets backend server. The server may be waking up (up to ~60 seconds on free hosting). Please check your connection and retry.'
+    );
+    netError.isNetworkError = true;
+    netError.originalError = error;
+    throw netError;
+  }
+};
 
 // In-memory local fallback store for offline development and testing
 const localOtpStore = new Map();
@@ -47,16 +128,16 @@ export const sendOtpApi = async (identifier, type = 'Login', role = 'customer', 
   const cleanId = (identifier || '').trim();
 
   try {
-    const response = await fetch(`${API_URL}/auth/send-otp`, {
+    const response = await fetchWithTimeout(buildApiUrl('/auth/send-otp'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier: cleanId, type, role, adminPin }),
-    });
+    }, 65000);
 
     const data = await response.json();
     return data;
   } catch (error) {
-    console.warn('[API Client] Backend offline or network error. Activating offline fallback mode:', error);
+    console.warn('[API Client] Backend connection issue. Activating safe fallback mode:', error);
 
     const norm = normalizeIdentifier(cleanId);
     const isEmail = norm.includes('@');
@@ -71,10 +152,21 @@ export const sendOtpApi = async (identifier, type = 'Login', role = 'customer', 
       type
     });
 
+    const isProd = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    const isTimeout = !!error.isTimeout;
+
+    const fallbackMessage = isTimeout
+      ? 'The Sahoo Sweets backend server is waking up from sleep mode (Render free-tier cold start, ~30-60s). Please wait a moment and retry, or use test code 123456.'
+      : isProd
+        ? 'Unable to connect to the Sahoo Sweets backend server (sahoosweets.onrender.com). The server may be waking up from sleep mode (up to ~60 seconds on free hosting). Please wait a moment and retry, or test with code 123456.'
+        : 'Backend server on port 5000 is not running. Running in Local Test Mode with test code 123456.';
+
     return {
       success: true,
       isLocalFallback: true,
-      message: 'Backend server is not running on port 5000. Running in Local Offline Mode with test code 123456.',
+      isTimeout,
+      canRetry: true,
+      message: fallbackMessage,
       target: isEmail ? norm : `+91 ${norm}`,
       identifierType: isEmail ? 'email' : 'phone',
       expiresIn: 300,
@@ -91,24 +183,24 @@ export const verifyOtpApi = async (identifier, otp) => {
   const cleanOtp = (otp || '').trim();
 
   try {
-    const response = await fetch(`${API_URL}/auth/verify-otp`, {
+    const response = await fetchWithTimeout(buildApiUrl('/auth/verify-otp'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier: cleanId, otp: cleanOtp }),
-    });
+    }, 35000);
 
     const data = await response.json();
     return data;
   } catch (error) {
-    console.warn('[API Client] Backend offline. Running local verification fallback...', error);
+    console.warn('[API Client] Backend offline or slow. Running local verification fallback...', error);
 
     const norm = normalizeIdentifier(cleanId);
 
-    // Master test code support in offline mode
+    // Master test code support in offline / fallback mode
     if (cleanOtp === '123456' || cleanOtp === '1234') {
       return {
         success: true,
-        message: 'OTP verified successfully (Offline Mode)!',
+        message: 'OTP verified successfully (Test Fallback Mode)!',
         user: { identifier: norm, role: 'customer' }
       };
     }
@@ -158,7 +250,7 @@ export const verifyOtpApi = async (identifier, otp) => {
 // =============================================================================
 export const getSweetsMenu = async () => {
   try {
-    const response = await fetch(`${API_URL}/menu`);
+    const response = await fetchWithTimeout(buildApiUrl('/menu'), {}, 30000);
     const result = await response.json();
     return result.menu || [];
   } catch (error) {
@@ -169,9 +261,9 @@ export const getSweetsMenu = async () => {
 
 export const toggleMenuItemStockApi = async (id) => {
   try {
-    const response = await fetch(`${API_URL}/menu/${id}/toggle-stock`, {
+    const response = await fetchWithTimeout(buildApiUrl(`/menu/${id}/toggle-stock`), {
       method: 'PATCH'
-    });
+    }, 25000);
     return await response.json();
   } catch (error) {
     console.warn('[API Client] Stock toggle API offline, relying on local state');
@@ -184,7 +276,11 @@ export const toggleMenuItemStockApi = async (id) => {
 // =============================================================================
 export const fetchOrdersApi = async (userIdentifier, role = 'customer') => {
   try {
-    const response = await fetch(`${API_URL}/orders?userIdentifier=${encodeURIComponent(userIdentifier || '')}&role=${role}`);
+    const response = await fetchWithTimeout(
+      buildApiUrl(`/orders?userIdentifier=${encodeURIComponent(userIdentifier || '')}&role=${role}`),
+      {},
+      30000
+    );
     const data = await response.json();
     return data.orders || [];
   } catch (error) {
@@ -195,11 +291,11 @@ export const fetchOrdersApi = async (userIdentifier, role = 'customer') => {
 
 export const createOrderApi = async (orderData) => {
   try {
-    const response = await fetch(`${API_URL}/orders`, {
+    const response = await fetchWithTimeout(buildApiUrl('/orders'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(orderData)
-    });
+    }, 35000);
     return await response.json();
   } catch (error) {
     console.warn('[API Client] Create order offline, continuing with local confirmation:', error);
@@ -213,11 +309,11 @@ export const createOrderApi = async (orderData) => {
 
 export const updateOrderStatusApi = async (orderId, statusIndex, status) => {
   try {
-    const response = await fetch(`${API_URL}/orders/${orderId}/status`, {
+    const response = await fetchWithTimeout(buildApiUrl(`/orders/${orderId}/status`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ statusIndex, status })
-    });
+    }, 25000);
     return await response.json();
   } catch (error) {
     console.warn('[API Client] Update order status offline');
@@ -227,11 +323,11 @@ export const updateOrderStatusApi = async (orderId, statusIndex, status) => {
 
 export const cancelOrderApi = async (orderId, reason) => {
   try {
-    const response = await fetch(`${API_URL}/orders/${orderId}/cancel`, {
+    const response = await fetchWithTimeout(buildApiUrl(`/orders/${orderId}/cancel`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason })
-    });
+    }, 25000);
     return await response.json();
   } catch (error) {
     console.warn('[API Client] Cancel order offline');
@@ -241,11 +337,11 @@ export const cancelOrderApi = async (orderId, reason) => {
 
 export const rateOrderApi = async (orderId, rating, feedback) => {
   try {
-    const response = await fetch(`${API_URL}/orders/${orderId}/rate`, {
+    const response = await fetchWithTimeout(buildApiUrl(`/orders/${orderId}/rate`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rating, feedback })
-    });
+    }, 25000);
     return await response.json();
   } catch (error) {
     console.warn('[API Client] Rate order offline');
@@ -258,7 +354,11 @@ export const rateOrderApi = async (orderId, rating, feedback) => {
 // =============================================================================
 export const fetchUserProfileApi = async (identifier) => {
   try {
-    const response = await fetch(`${API_URL}/users/profile?identifier=${encodeURIComponent(identifier || '')}`);
+    const response = await fetchWithTimeout(
+      buildApiUrl(`/users/profile?identifier=${encodeURIComponent(identifier || '')}`),
+      {},
+      30000
+    );
     const data = await response.json();
     return data.profile || null;
   } catch (error) {
@@ -269,11 +369,11 @@ export const fetchUserProfileApi = async (identifier) => {
 
 export const updateUserProfileApi = async (profileData) => {
   try {
-    const response = await fetch(`${API_URL}/users/profile`, {
+    const response = await fetchWithTimeout(buildApiUrl('/users/profile'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(profileData)
-    });
+    }, 30000);
     return await response.json();
   } catch (error) {
     console.warn('[API Client] Profile update offline');
@@ -283,11 +383,11 @@ export const updateUserProfileApi = async (profileData) => {
 
 export const convertRewardsApi = async (identifier, points) => {
   try {
-    const response = await fetch(`${API_URL}/wallet/convert-rewards`, {
+    const response = await fetchWithTimeout(buildApiUrl('/wallet/convert-rewards'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier, points })
-    });
+    }, 25000);
     return await response.json();
   } catch (error) {
     console.warn('[API Client] Convert rewards offline');
@@ -297,11 +397,11 @@ export const convertRewardsApi = async (identifier, points) => {
 
 export const rechargeWalletApi = async (identifier, amount) => {
   try {
-    const response = await fetch(`${API_URL}/wallet/recharge`, {
+    const response = await fetchWithTimeout(buildApiUrl('/wallet/recharge'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier, amount })
-    });
+    }, 25000);
     return await response.json();
   } catch (error) {
     console.warn('[API Client] Recharge wallet offline');
@@ -311,7 +411,7 @@ export const rechargeWalletApi = async (identifier, amount) => {
 
 export const checkHealthApi = async () => {
   try {
-    const response = await fetch(`${API_URL}/health`);
+    const response = await fetchWithTimeout(buildApiUrl('/health'), {}, 20000);
     return await response.json();
   } catch {
     return { status: 'offline' };

@@ -179,8 +179,8 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center text-xs font-semibold text-gray-600 transition mt-1">
               <MapPin className="w-3.5 h-3.5 mr-1 shrink-0" style={{ color: '#BE6B59' }} />
-              <span className="font-bold text-gray-900">At/Po - Nagapur</span>
-              <span className="text-gray-500 ml-1 truncate max-w-[160px] sm:max-w-xs">, Puri, Odisha - 752001</span>
+              <span className="font-bold text-gray-900">Nagapur</span>
+              <span className="text-gray-500 ml-1 truncate max-w-[160px] sm:max-w-xs">, Near Punjab National Bank, Gop, Puri</span>
               <ChevronDown className="w-3.5 h-3.5 ml-1 shrink-0" style={{ color: '#BE6B59' }} />
             </div>
           </div>
@@ -367,7 +367,7 @@ export default function Dashboard() {
                   <Home className="w-5 h-5 mt-0.5" style={{ color: '#BE6B59' }} />
                   <div>
                     <span className="text-[10px] font-black uppercase text-white px-2 py-0.5 rounded" style={{ backgroundColor: '#BE6B59' }}>HOME (DEFAULT)</span>
-                    <h4 className="text-sm font-extrabold text-gray-900 mt-1">At/Po - Nagapur, Brahmagiri Road, Puri, Odisha - 752001</h4>
+                    <h4 className="text-sm font-extrabold text-gray-900 mt-1">Nagapur, Near Punjab National Bank, Gop, Puri</h4>
                   </div>
                 </div>
               </div>
@@ -377,10 +377,10 @@ export default function Dashboard() {
           {activePanel === 'help' && (
             <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border max-w-2xl space-y-4" style={{ borderColor: '#BBAB47' }}>
               <h2 className="text-xl font-black text-gray-900 border-b pb-3" style={{ borderColor: '#BBAB47' }}>Help & Customer Support</h2>
-              <p className="text-xs text-gray-600">Contact Krushna Chandra Sahoo directly:</p>
+              <p className="text-xs text-gray-600">Contact Sahoo Sweets customer support:</p>
               <div className="space-y-2 text-xs font-bold">
-                <p className="p-3 rounded-xl border" style={{ backgroundColor: '#f2c98330', borderColor: '#BBAB47', color: '#BE6B59' }}>📞 Phone / WhatsApp: +91 9078699528</p>
-                <p className="p-3 rounded-xl border" style={{ backgroundColor: '#f2c98330', borderColor: '#BBAB47', color: '#BE6B59' }}>📧 Email: krushnachandrasahoo990@gmail.com</p>
+                <p className="p-3 rounded-xl border" style={{ backgroundColor: '#f2c98330', borderColor: '#BBAB47', color: '#BE6B59' }}>📞 Delivery Helpline: +91 8763332962</p>
+                <p className="p-3 rounded-xl border" style={{ backgroundColor: '#f2c98330', borderColor: '#BBAB47', color: '#BE6B59' }}>📧 Email: noreply@sahoosweets.in</p>
               </div>
             </div>
           )}

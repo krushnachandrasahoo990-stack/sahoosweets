@@ -343,7 +343,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-gray-500 font-medium truncate max-w-[220px] sm:max-w-xs">
-                Brahmagiri Road, Puri • Fresh Sweets & Odia Snacks
+                Nagapur, Near Punjab National Bank, Gop, Puri • Fresh Sweets & Odia Snacks
               </p>
             </div>
           </div>
@@ -414,7 +414,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                         {currentAddress?.address}, {currentAddress?.city} - {currentAddress?.pin}
                       </p>
                       <p className="text-[11px] font-bold text-gray-500 mt-0.5">
-                        📞 {currentAddress?.phone || '9078699528'}
+                        📞 {currentAddress?.phone || '+91 8763332962'}
                       </p>
                     </div>
                   </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, User, ShieldCheck, Lock, Eye, EyeOff, 
-  AlertCircle, Smartphone, Mail, Sparkles, KeyRound, Loader2, CheckCircle2 
+  AlertCircle, Smartphone, Mail, Sparkles, KeyRound, Loader2, CheckCircle2, RotateCcw 
 } from 'lucide-react';
 import { sendOtpApi, verifyOtpApi } from '../services/api';
 
@@ -181,7 +181,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       setVerifyError('');
       setTimer(res.cooldown || 60);
     } catch {
-      setLoginError('Network error connecting to Sahoo Sweets OTP gateway. Please retry.');
+      setLoginError('Unable to connect to the Sahoo Sweets backend server. The server may be waking up from sleep mode (up to ~60 seconds on free hosting). Please check your connection and retry.');
     } finally {
       setIsSendingOtp(false);
     }
@@ -309,24 +309,38 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
             {/* Branded Delivery, Spam Guidance, or Offline Test Mode Notice */}
             {isOfflineMode ? (
-              <div className="mt-3 p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-left space-y-2 animate-fadeIn">
+              <div className="mt-3 p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-left space-y-2.5 animate-fadeIn">
                 <div className="flex items-center space-x-1.5 text-xs font-black text-amber-950">
                   <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
-                  <span>Offline Test Mode Active (Backend server offline)</span>
+                  <span>Server Waking Up / Offline Mode</span>
                 </div>
                 <p className="text-[11px] text-amber-900 leading-relaxed">
-                  Backend server on port 5000 is not running. You can explore and test all features using test OTP <strong className="font-mono bg-amber-200 px-1.5 py-0.5 rounded text-black font-black">123456</strong>.
+                  The Sahoo Sweets backend server (Render free tier) may be waking up from sleep (~30-60s) or offline. You can click <strong>Retry Connection</strong> once awake, or explore all storefront and admin features right away using test code <strong className="font-mono bg-amber-200 px-1.5 py-0.5 rounded text-black font-black">123456</strong>.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOtpDigits(['1', '2', '3', '4', '5', '6']);
-                    setVerifyError('');
-                  }}
-                  className="w-full py-2 bg-black hover:bg-gray-800 text-amber-400 text-xs font-black rounded-xl transition cursor-pointer shadow-sm flex items-center justify-center space-x-1"
-                >
-                  <span>⚡ Auto-Fill Test Code (123456)</span>
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStep('input');
+                      triggerOtpFlow(authType);
+                    }}
+                    disabled={isSendingOtp}
+                    className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-xl transition cursor-pointer shadow-sm flex items-center justify-center space-x-1"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Retry Connection</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpDigits(['1', '2', '3', '4', '5', '6']);
+                      setVerifyError('');
+                    }}
+                    className="flex-1 py-2 px-3 bg-black hover:bg-gray-800 text-amber-400 text-xs font-black rounded-xl transition cursor-pointer shadow-sm flex items-center justify-center space-x-1"
+                  >
+                    <span>⚡ Auto-Fill 123456</span>
+                  </button>
+                </div>
               </div>
             ) : deliveryType === 'email' ? (
               <div className="mt-3 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-left space-y-1.5 animate-fadeIn">
@@ -435,7 +449,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               type="button"
               onClick={() => {
                 setLoginRole('customer');
-                setLoginId('krushnachandrasahoo990@gmail.com');
+                setLoginId('noreply@sahoosweets.in');
                 setLoginError('');
                 setCanSwitchToEmail(false);
               }}
@@ -447,7 +461,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               type="button"
               onClick={() => {
                 setLoginRole('admin');
-                setLoginId('krushnachandrasahoo990@gmail.com');
+                setLoginId('noreply@sahoosweets.in');
                 setAdminPin('9900');
                 setLoginError('');
                 setCanSwitchToEmail(false);
@@ -549,20 +563,31 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                       <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                       <p className="text-[11px] font-bold text-rose-800 leading-relaxed">{loginError}</p>
                     </div>
-                    {canSwitchToEmail && (
+                    <div className="flex flex-col gap-1.5 pt-0.5">
                       <button
                         type="button"
-                        onClick={() => {
-                          setLoginId('krushnachandrasahoo990@gmail.com');
-                          setLoginError('');
-                          setCanSwitchToEmail(false);
-                        }}
-                        className="w-full py-2 px-3 bg-black hover:bg-gray-800 text-amber-400 font-black rounded-lg text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer shadow-sm"
+                        onClick={() => triggerOtpFlow('Login')}
+                        disabled={isSendingOtp}
+                        className="w-full py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white font-black rounded-lg text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer shadow-sm"
                       >
-                        <Mail className="w-3.5 h-3.5" />
-                        <span>Switch to Email OTP ("Sahoo Sweets") ➔</span>
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Retry Connection ➔</span>
                       </button>
-                    )}
+                      {canSwitchToEmail && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLoginId('noreply@sahoosweets.in');
+                            setLoginError('');
+                            setCanSwitchToEmail(false);
+                          }}
+                          className="w-full py-2 px-3 bg-black hover:bg-gray-800 text-amber-400 font-black rounded-lg text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer shadow-sm"
+                        >
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>Switch to Email OTP ("Sahoo Sweets") ➔</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -647,7 +672,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <button
                   type="button"
                   onClick={() => {
-                    const target = loginId.trim() || 'krushnachandrasahoo990@gmail.com';
+                    const target = loginId.trim() || 'noreply@sahoosweets.in';
                     localStorage.setItem('isAuthenticated', 'true');
                     localStorage.setItem('userPhone', target);
                     localStorage.setItem('userRole', loginRole);
@@ -685,11 +710,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               </div>
               <div>
                 <label className="block text-[10px] font-black text-black uppercase">Email Address (Recommended) *</label>
-                <input type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} required placeholder="krushnachandrasahoo990@gmail.com" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
+                <input type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} required placeholder="noreply@sahoosweets.in" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
               </div>
               <div>
                 <label className="block text-[10px] font-black text-black uppercase">Phone Number (+91)</label>
-                <input type="tel" maxLength={10} value={signupPhone} onChange={e => setSignupPhone(e.target.value)} placeholder="9078699528" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
+                <input type="tel" maxLength={10} value={signupPhone} onChange={e => setSignupPhone(e.target.value)} placeholder="8763332962" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
               </div>
               
               <div>

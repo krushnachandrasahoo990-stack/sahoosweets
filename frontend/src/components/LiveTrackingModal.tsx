@@ -339,10 +339,10 @@ export const LiveTrackingModal: React.FC<LiveTrackingProps> = ({
               {/* Top Landmarks on the map */}
               <div className="relative z-10 flex justify-between text-[10px] font-bold text-slate-400 px-2">
                 <span className="bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700 text-slate-300">
-                  🏪 Sahoo Sweets Hub (Puri)
+                  🏪 Sahoo Sweets Hub (Gop, Puri)
                 </span>
                 <span className="bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700 text-slate-300 hidden sm:inline">
-                  🛣️ Brahmagiri High Road
+                  🛣️ Gop - Puri High Road
                 </span>
                 <span className="bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700 text-slate-300">
                   📍 {order.address.split(',')[0]}

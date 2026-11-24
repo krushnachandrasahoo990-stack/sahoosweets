@@ -22,25 +22,56 @@ try {
 
 const app = express();
 
-// Allowed Origins for CORS (Vercel Frontend, Localhost, or custom FRONTEND_URL)
+// Allowed Origins for CORS (Vercel Frontend, Localhost, Render, or custom FRONTEND_URL)
+const rawFrontendUrls = (process.env.FRONTEND_URL || '').split(',').map(u => u.trim()).filter(Boolean);
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:3000',
-  process.env.FRONTEND_URL
-].filter(Boolean);
+  'https://sahoosweets.vercel.app',
+  'http://sahoosweets.vercel.app',
+  ...rawFrontendUrls
+];
 
-app.use(cors({
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true; // Allow non-browser requests (e.g. mobile apps, curl, server-to-server)
+  const clean = origin.trim().replace(/\/+$/, '');
+  if (allowedOrigins.some(ao => ao.replace(/\/+$/, '') === clean)) return true;
+  if (/^https:\/\/([a-zA-Z0-9\-]+\.)?vercel\.app$/.test(clean)) return true; // Allow any Vercel preview or production URL
+  if (/^http:\/\/localhost(:\d+)?$/.test(clean)) return true;
+  if (/^http:\/\/127\.0\.0\.1(:\d+)?$/.test(clean)) return true;
+  return false;
+};
+
+const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
-      callback(null, true); // Allow during transition to ensure deployment connectivity
+      console.warn(`[CORS Info] Permitting origin during cloud transition: ${origin}`);
+      callback(null, true); // Safe fallback to ensure zero connectivity blocks
     }
   },
-  credentials: true
-}));
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'x-admin-pin',
+    'admin-pin'
+  ],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  optionsSuccessStatus: 200,
+  maxAge: 86400 // Cache preflight for 24 hours to reduce latency
+};
+
+app.use(cors(corsOptions));
+// Handle preflight OPTIONS requests cleanly across all routes
+app.options('*', cors(corsOptions));
 
 app.use(express.json());
 
@@ -88,9 +119,9 @@ const inMemoryUsers = new Map();
 const inMemoryOrders = [
   { 
     id: "SS-1084",
-    userIdentifier: "9078699528",
+    userIdentifier: "8763332962",
     customerName: "Krushna Chandra Sahoo",
-    customerPhone: "9078699528",
+    customerPhone: "8763332962",
     date: "Nov 18, 2026, 02:40 PM", 
     items: "Pahala Style Rosgola (1 Kg), Bara (4 Pcs)", 
     itemsList: [
@@ -105,7 +136,7 @@ const inMemoryOrders = [
     status: "Out for Delivery",
     steps: ["Order Confirmed", "Placed", "Shipped/Preparing", "Out for Delivery", "Delivered"],
     payment: "Cash on Delivery",
-    address: "At/Po - Nagapur, Brahmagiri Road, Puri, Odisha - 752001",
+    address: "Nagapur, Near Punjab National Bank, Gop, Puri",
     estimatedMinutes: 12
   }
 ];
@@ -113,17 +144,17 @@ const inMemoryOtps = new Map();
 const otpRateLimits = new Map();
 
 // Default seed user
-inMemoryUsers.set('9078699528', {
-  identifier: '9078699528',
+inMemoryUsers.set('8763332962', {
+  identifier: '8763332962',
   name: 'Krushna Chandra Sahoo',
-  phone: '9078699528',
-  email: 'krushnachandrasahoo990@gmail.com',
+  phone: '8763332962',
+  email: 'noreply@sahoosweets.in',
   role: 'customer',
   walletBalance: 250,
   rewardPoints: 350,
   addresses: [
-    { id: 1, name: "Krushna Chandra Sahoo", phone: "9078699528", address: "At/Po - Nagapur, Brahmagiri Road", city: "Puri", state: "Odisha", pin: "752001", isDefault: true },
-    { id: 2, name: "Sahoo Sweets Counter", phone: "9078699528", address: "Grand Road, Near Jagannath Temple", city: "Puri", state: "Odisha", pin: "752001", isDefault: false }
+    { id: 1, name: "Krushna Chandra Sahoo", phone: "8763332962", address: "Nagapur, Near Punjab National Bank", city: "Gop, Puri", state: "Odisha", pin: "752110", isDefault: true },
+    { id: 2, name: "Sahoo Sweets Counter", phone: "8763332962", address: "Nagapur, Near Punjab National Bank, Gop, Puri", city: "Puri", state: "Odisha", pin: "752110", isDefault: false }
   ],
   walletHistory: [
     { id: 1, type: 'credit', title: 'Welcome Cashback Reward', amount: 250, date: 'Nov 12, 2026' },
@@ -169,7 +200,7 @@ async function connectToDatabase() {
     // Auto-seed demo user if none exists
     const userCount = await User.countDocuments();
     if (userCount === 0) {
-      await User.create(inMemoryUsers.get('9078699528'));
+      await User.create(inMemoryUsers.get('8763332962'));
       console.log('👤 [MongoDB] Default user profile initialized.');
     }
   } catch (err) {
@@ -235,24 +266,40 @@ function isRateLimited(identifier) {
 }
 
 // =============================================================================
-// REAL DELIVERY DISPATCHERS (EMAIL & INDIAN SMS)
+// REAL DELIVERY DISPATCHERS (BREVO SMTP / NODEMAILER & SMS)
 // =============================================================================
 
 /**
- * Sends Email OTP branded under "Sahoo Sweets" via Nodemailer SMTP or Resend API
+ * Sends Email OTP branded under "Sahoo Sweets" via Brevo SMTP or Gmail SMTP
  */
 async function sendEmailOtp(email, otp, type = 'Login') {
-  const senderName = process.env.OTP_SENDER_NAME || 'Sahoo Sweets';
-  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
-  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
-  const smtpHost = process.env.SMTP_HOST || process.env.EMAIL_HOST || 'smtp.gmail.com';
-  const smtpPort = Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 587;
+  // 1. Read sender name from OTP_SENDER_NAME || FROM_NAME || SENDER_NAME || "Sahoo Sweets"
+  const rawSenderName = process.env.OTP_SENDER_NAME || process.env.FROM_NAME || process.env.SENDER_NAME || 'Sahoo Sweets';
+  const senderName = String(rawSenderName).replace(/^["']|["']$/g, '').trim() || 'Sahoo Sweets';
+
+  let smtpHost = process.env.SMTP_HOST || 'smtp-relay.brevo.com';
+  const smtpPort = Number(process.env.SMTP_PORT) || 587;
   const isSecure = process.env.SMTP_SECURE !== undefined 
     ? (process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === true)
-    : (smtpPort === 465);
+    : (smtpPort === 465); // false for port 587
 
-  const subject = `Your Sahoo Sweets Login OTP: ${otp}`;
-  const fromHeader = process.env.MAIL_FROM || `"${senderName}" <${smtpUser || 'no-reply@sahoosweets.com'}>`;
+  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+  
+  // Auto-detect Gmail vs Brevo if pass is 16-letter Gmail app password
+  if (smtpPass && smtpPass.length === 16 && /^[a-z]+$/.test(smtpPass) && (!process.env.SMTP_HOST || process.env.SMTP_HOST.includes('gmail'))) {
+    smtpHost = 'smtp.gmail.com';
+  }
+
+  // 2. Read sender email address from OTP_FROM_EMAIL || MAIL_FROM || SMTP_USER
+  const rawFromEmail = process.env.OTP_FROM_EMAIL || process.env.MAIL_FROM || process.env.SMTP_USER || 'noreply@sahoosweets.in';
+  // Extract pure email address if rawFromEmail contains "Display Name" <email@domain.com>
+  const emailMatch = String(rawFromEmail).match(/<([^>]+)>/);
+  const fromEmail = (emailMatch ? emailMatch[1] : rawFromEmail).replace(/^["']|["']$/g, '').trim();
+
+  // 3. Construct properly formatted From header: "${senderName}" <${fromEmail}>
+  const fromHeader = `"${senderName}" <${fromEmail}>`;
+  const subject = 'Your Sahoo Sweets Login OTP';
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -265,7 +312,7 @@ async function sendEmailOtp(email, otp, type = 'Login') {
       <div style="max-width: 520px; margin: 0 auto; background-color: #ffffff; border: 2px solid #BBAB47; border-radius: 20px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
         <div style="text-align: center; border-bottom: 2px dashed #f2c983; padding-bottom: 20px; margin-bottom: 24px;">
           <h1 style="color: #1a1a1a; margin: 0; font-size: 26px; font-weight: 900; letter-spacing: 1px;">SAHOO SWEETS</h1>
-          <p style="color: #8c7625; margin: 6px 0 0; font-size: 13px; font-weight: 700;">Traditional Sweets & Snacks Delivery • Grand Road, Puri</p>
+          <p style="color: #8c7625; margin: 6px 0 0; font-size: 13px; font-weight: 700;">Traditional Sweets & Snacks Delivery • Nagapur, Gop, Puri</p>
         </div>
 
         <p style="font-size: 15px; color: #333333; line-height: 1.5; margin-bottom: 12px;">
@@ -299,10 +346,10 @@ async function sendEmailOtp(email, otp, type = 'Login') {
 
         <div style="border-top: 1px solid #eeeeee; padding-top: 18px; text-align: center;">
           <p style="font-size: 12px; font-weight: 800; color: #333333; margin: 0 0 4px;">
-            Sahoo Sweets • Grand Road, Near Jagannath Temple, Puri, Odisha - 752001
+            Sahoo Sweets • Nagapur, Near Punjab National Bank, Gop, Puri
           </p>
           <p style="font-size: 11px; color: #999999; margin: 0;">
-            Delivery Helpline: +91 9078699528 • krushnachandrasahoo990@gmail.com
+            Delivery Helpline: +91 8763332962 • noreply@sahoosweets.in
           </p>
         </div>
       </div>
@@ -310,42 +357,9 @@ async function sendEmailOtp(email, otp, type = 'Login') {
     </html>
   `;
 
-  const textContent = `SAHOO SWEETS - LOGIN OTP\n\nYour 6-digit verification code is: ${otp}\n\nThis OTP is valid for 5 minutes. Please do not share it with anyone.\nIf not found in your primary inbox, please check your Spam / Junk folder.\n\nSahoo Sweets, Grand Road, Puri, Odisha\nDelivery Helpline: +91 9078699528`;
+  const textContent = `SAHOO SWEETS - LOGIN OTP\n\nYour 6-digit verification code is: ${otp}\n\nThis OTP is valid for 5 minutes. Please do not share it with anyone.\nIf not found in your primary inbox, please check your Spam / Junk folder.\n\nSahoo Sweets, Nagapur, Near Punjab National Bank, Gop, Puri\nDelivery Helpline: +91 8763332962 • noreply@sahoosweets.in`;
 
-  // Option 1: Resend API (HTTP API)
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: process.env.RESEND_FROM || fromHeader,
-          to: email,
-          subject,
-          text: textContent,
-          html: htmlContent
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || 'Resend API rejected dispatch');
-      }
-      console.log(`[Email Gateway - Resend] Dispatched to ${email}. ID:`, data.id || 'ok');
-      return { 
-        success: true, 
-        provider: 'resend', 
-        id: data.id,
-        message: `OTP sent under "${senderName}" to ${email}. Please check your Inbox and Spam/Junk folder.`
-      };
-    } catch (err) {
-      console.error('[Email Gateway Error - Resend]:', err);
-    }
-  }
-
-  // Option 2: Nodemailer (SMTP / Gmail App Password)
+  // Brevo Nodemailer SMTP Dispatcher
   if (!nodemailer) {
     return {
       success: false,
@@ -354,12 +368,16 @@ async function sendEmailOtp(email, otp, type = 'Login') {
     };
   }
 
+  // Validate SMTP credentials
   if (!smtpUser || !smtpPass) {
-    console.warn(`[Email Gateway] SMTP credentials missing in backend/.env (SMTP_USER=${smtpUser || 'MISSING'}, SMTP_PASS=${smtpPass ? 'SET' : 'MISSING'}).`);
+    const isBrevo = smtpHost.includes('brevo');
+    console.warn(`[SMTP Gateway] Credentials missing in backend/.env (SMTP_USER=${smtpUser || 'MISSING'}, SMTP_PASS=${smtpPass ? 'SET' : 'MISSING'}).`);
     return {
       success: false,
       code: 'EMAIL_CONFIG_MISSING',
-      message: `Email OTP service is not configured on the server. Please add your 16-character Gmail App Password to SMTP_PASS in backend/.env for ${smtpUser || 'your email'} to send live branded OTP emails.`
+      message: isBrevo
+        ? 'Brevo SMTP service is not configured on the server. Please add your Brevo SMTP login (SMTP_USER) and Brevo SMTP key (SMTP_PASS) in backend/.env.'
+        : 'Email SMTP service is not configured on the server. Please check your SMTP_USER and SMTP_PASS in backend/.env.'
     };
   }
 
@@ -367,7 +385,7 @@ async function sendEmailOtp(email, otp, type = 'Login') {
     const transporter = nodemailer.createTransport({
       host: smtpHost,
       port: smtpPort,
-      secure: isSecure,
+      secure: isSecure, // false for 587
       auth: {
         user: smtpUser,
         pass: smtpPass
@@ -385,19 +403,19 @@ async function sendEmailOtp(email, otp, type = 'Login') {
       html: htmlContent
     });
 
-    console.log(`[Email Gateway - Nodemailer] Dispatched branded OTP to ${email}. MessageId:`, info.messageId);
+    console.log(`[Email Gateway - Brevo SMTP] Dispatched branded OTP to ${email}. MessageId:`, info.messageId);
     return { 
       success: true, 
-      provider: 'nodemailer', 
+      provider: 'brevo-smtp', 
       id: info.messageId,
       message: `OTP sent under "${senderName}" to ${email}. Please check your Inbox and Spam/Junk folder.` 
     };
   } catch (err) {
-    console.error('[Email Gateway Error - Nodemailer]:', err);
+    console.error('[Email Gateway Error - Brevo SMTP]:', err);
     return {
       success: false,
       code: 'EMAIL_SEND_FAILED',
-      message: `SMTP Email delivery failed: ${err.message || 'Authentication error'}. Please check your SMTP_USER and Gmail App Password in backend/.env.`
+      message: `Brevo SMTP Email delivery failed: ${err.message || 'Authentication error'}. Please check your Brevo SMTP_USER and SMTP_PASS in backend/.env.`
     };
   }
 }
@@ -934,9 +952,9 @@ app.post('/api/orders', async (req, res) => {
 
     const newOrder = {
       id: orderId,
-      userIdentifier: orderData.userIdentifier || '9078699528',
+      userIdentifier: orderData.userIdentifier || '8763332962',
       customerName: orderData.customerName || 'Customer',
-      customerPhone: orderData.customerPhone || '9078699528',
+      customerPhone: orderData.customerPhone || '8763332962',
       date: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
       items: orderData.items || 'Sahoo Sweets Assorted Pack',
       itemsList: orderData.itemsList || [],
@@ -949,7 +967,7 @@ app.post('/api/orders', async (req, res) => {
       statusIndex: 0,
       steps: ["Order Confirmed", "Placed", "Shipped/Preparing", "Out for Delivery", "Delivered"],
       payment: orderData.payment || 'Cash on Delivery',
-      address: orderData.address || 'Grand Road, Puri',
+      address: orderData.address || 'Nagapur, Near Punjab National Bank, Gop, Puri',
       deliveryInstructions: orderData.deliveryInstructions || '',
       cookingInstruction: orderData.cookingInstruction || '',
       estimatedMinutes: 24,
@@ -1344,14 +1362,30 @@ app.post('/api/wallet/recharge', async (req, res) => {
 });
 
 // =============================================================================
-// HEALTH CHECK ENDPOINT (Useful for Render Web Service Monitoring)
+// HEALTH CHECK ENDPOINTS (Render Web Service Monitoring & Health Probes)
 // =============================================================================
-app.get('/api/health', (req, res) => {
-  res.json({
+const healthHandler = (req, res) => {
+  res.status(200).json({
     status: 'online',
-    appName: 'Sahoo Sweets Backend',
+    appName: 'Sahoo Sweets Backend API',
     database: isDbConnected ? 'MongoDB (Connected)' : 'In-Memory DB (Active)',
     timestamp: new Date().toISOString()
+  });
+};
+
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'online',
+    appName: 'Sahoo Sweets API Server',
+    message: 'Backend server is running smoothly on Render.',
+    endpoints: {
+      health: '/api/health',
+      menu: '/api/menu',
+      sendOtp: '/api/auth/send-otp',
+      verifyOtp: '/api/auth/verify-otp'
+    }
   });
 });
 
