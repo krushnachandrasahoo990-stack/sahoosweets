@@ -320,15 +320,21 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <div className="flex flex-col sm:flex-row gap-2 pt-0.5">
                   <button
                     type="button"
-                    onClick={() => {
-                      setStep('input');
-                      triggerOtpFlow(authType);
-                    }}
+                    onClick={() => triggerOtpFlow(authType)}
                     disabled={isSendingOtp}
                     className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-xl transition cursor-pointer shadow-sm flex items-center justify-center space-x-1"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Retry Connection</span>
+                    {isSendingOtp ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Connecting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Retry Connection</span>
+                      </>
+                    )}
                   </button>
                   <button
                     type="button"
