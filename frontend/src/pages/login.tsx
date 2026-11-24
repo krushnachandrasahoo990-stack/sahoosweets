@@ -3,7 +3,7 @@ import {
   ArrowLeft, User, ShieldCheck, Lock, Eye, EyeOff, 
   AlertCircle, Smartphone, Mail, Sparkles, KeyRound, Loader2, CheckCircle2, RotateCcw 
 } from 'lucide-react';
-import { sendOtpApi, verifyOtpApi } from '../services/api';
+import { sendOtpApi, verifyOtpApi, registerAccountApi } from '../services/api';
 
 interface LoginProps {
   onLoginSuccess: (role: 'customer' | 'admin') => void;
@@ -29,11 +29,14 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [signupAdminPin, setSignupAdminPin] = useState('9900');
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   // Loading & error states
   const [loginError, setLoginError] = useState('');
+  const [signupError, setSignupError] = useState('');
   const [canSwitchToEmail, setCanSwitchToEmail] = useState(false);
+  const [canSwitchSignupToEmail, setCanSwitchSignupToEmail] = useState(false);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
 
@@ -119,22 +122,109 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoginError('');
-    setCanSwitchToEmail(false);
+    setSignupError('');
+    setCanSwitchSignupToEmail(false);
+
+    // 1. Full Name Validation
+    if (!signupName.trim() || signupName.trim().length < 2) {
+      setSignupError('Please enter your Full Name (minimum 2 characters).');
+      return;
+    }
+
+    // 2. Contact Validation (Email or Phone)
+    const hasEmail = Boolean(signupEmail.trim());
+    const hasPhone = Boolean(signupPhone.trim());
+
+    if (!hasEmail && !hasPhone) {
+      setSignupError('Please provide an Email Address or 10-digit Indian Mobile Number.');
+      return;
+    }
+
+    if (hasEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signupEmail.trim())) {
+      setSignupError('Please enter a valid Email Address (e.g. name@domain.com).');
+      return;
+    }
+
+    if (hasPhone) {
+      const cleanPhone = signupPhone.replace(/\D/g, '');
+      if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
+        setSignupError('Please enter a valid 10-digit Indian Mobile Number starting with 6, 7, 8, or 9.');
+        return;
+      }
+    }
+
+    // 3. Password Validation
+    if (signupPassword.length < 6) {
+      setSignupError('Password must be at least 6 characters long.');
+      return;
+    }
 
     if (signupPassword !== confirmPassword) {
-      alert('Passwords do not match!');
+      setSignupError('Passwords do not match! Please check and re-type.');
       return;
     }
 
-    const target = signupEmail.trim() || signupPhone.trim();
-    const parsed = parseIdentifier(target);
+    // 4. Strict Admin PIN Validation
+    if (signupRole === 'admin') {
+      const cleanPin = signupAdminPin.trim();
+      if (!cleanPin || (cleanPin !== '9900' && cleanPin !== '1234')) {
+        setSignupError('Invalid Admin Access PIN! Authorized owner PIN required (Default PIN: 9900).');
+        return;
+      }
+    }
+
+    // 5. Terms Validation
+    if (!termsAccepted) {
+      setSignupError('Please agree to the Terms & Conditions to register.');
+      return;
+    }
+
+    const primaryTarget = signupEmail.trim() || signupPhone.trim();
+    const parsed = parseIdentifier(primaryTarget);
     if (!parsed) {
-      alert('Please enter a valid email address or 10-digit Indian mobile number!');
+      setSignupError('Invalid contact. Please enter a valid Email Address or Indian Phone.');
       return;
     }
 
-    triggerOtpFlow('Registration', signupRole, parsed.normalized);
+    setIsSendingOtp(true);
+    setSignupError('');
+    setCanSwitchSignupToEmail(false);
+
+    try {
+      const res = await registerAccountApi({
+        name: signupName.trim(),
+        email: signupEmail.trim(),
+        phone: signupPhone.trim(),
+        identifier: parsed.normalized,
+        password: signupPassword,
+        role: signupRole,
+        adminPin: signupAdminPin
+      });
+
+      if (!res.success) {
+        setSignupError(res.message || 'Failed to complete registration. Please check your details.');
+        if (res.canSwitchToEmail || res.code === 'SMS_GATEWAY_NOT_CONFIGURED') {
+          setCanSwitchSignupToEmail(true);
+        }
+        setIsSendingOtp(false);
+        return;
+      }
+
+      // Success: advance to OTP view
+      setCanSwitchToEmail(false);
+      setIsOfflineMode(!!res.isLocalFallback);
+      setAuthType('Registration');
+      setStep('otp');
+      setDeliveryTarget(res.target || parsed.display);
+      setDeliveryType(res.identifierType || parsed.type);
+      setOtpDigits(['', '', '', '', '', '']);
+      setVerifyError('');
+      setTimer(res.cooldown || 60);
+    } catch {
+      setSignupError('Unable to connect to the Sahoo Sweets backend server. The server may be waking up from sleep mode (up to ~60 seconds on free hosting). Please check your connection and retry.');
+    } finally {
+      setIsSendingOtp(false);
+    }
   };
 
   // Trigger 6-Digit OTP Generation & Real Dispatch
@@ -241,15 +331,16 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       const res = await verifyOtpApi(target, fullEnteredOtp);
 
       if (res.success) {
+        const finalRole = res.user?.role || (authType === 'Registration' ? signupRole : loginRole);
         try {
           localStorage.setItem('isAuthenticated', 'true');
           localStorage.setItem('userPhone', target);
-          localStorage.setItem('userRole', loginRole);
+          localStorage.setItem('userRole', finalRole);
           if (res.token) {
             localStorage.setItem('authToken', res.token);
           }
         } catch {}
-        onLoginSuccess(loginRole);
+        onLoginSuccess(finalRole);
       } else {
         setVerifyError(res.message || 'Incorrect 6-digit OTP. Please check and try again.');
       }
@@ -283,7 +374,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <ArrowLeft className="w-4 h-4 mr-1" /> Change {deliveryType === 'email' ? 'Email' : 'Number'}
               </button>
               <span className="px-2.5 py-1 rounded-lg text-[10px] uppercase font-black tracking-wider text-black" style={{ backgroundColor: '#c2b767' }}>
-                {loginRole === 'admin' ? 'ADMIN VERIFICATION' : 'CUSTOMER LOGIN'}
+                {authType === 'Registration' 
+                  ? (signupRole === 'admin' ? 'ADMIN REGISTRATION' : 'NEW CUSTOMER REGISTRATION') 
+                  : (loginRole === 'admin' ? 'ADMIN VERIFICATION' : 'CUSTOMER LOGIN')}
               </span>
             </div>
 
@@ -698,7 +791,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           </div>
 
           {/* BACK FACE: SIGNUP */}
-          <div className="bg-white/95 backdrop-blur-xl border rounded-3xl p-6 sm:p-7 shadow-2xl absolute inset-0 [transform:rotateY(180deg)]" style={{ backfaceVisibility: 'hidden', borderColor: '#BBAB47' }}>
+          <div className="bg-white/95 backdrop-blur-xl border rounded-3xl p-5 sm:p-6 shadow-2xl absolute inset-0 overflow-y-auto [transform:rotateY(180deg)]" style={{ backfaceVisibility: 'hidden', borderColor: '#BBAB47' }}>
             <div className="text-center mb-2">
               <h2 className="text-xl font-black text-black">Create Account</h2>
               <p className="text-[11px] font-bold text-gray-600">Choose role & register</p>
@@ -711,22 +804,95 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
             <form onSubmit={handleSignupSubmit} className="space-y-2">
               <div>
-                <label className="block text-[10px] font-black text-black uppercase">Full Name</label>
-                <input type="text" value={signupName} onChange={e => setSignupName(e.target.value)} required placeholder="Krushna Chandra Sahoo" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
+                <label className="block text-[10px] font-black text-black uppercase">Full Name *</label>
+                <input 
+                  type="text" 
+                  value={signupName} 
+                  onChange={e => {
+                    setSignupName(e.target.value);
+                    if (signupError) setSignupError('');
+                  }} 
+                  required 
+                  placeholder="Krushna Chandra Sahoo" 
+                  className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" 
+                  style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} 
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-black text-black uppercase">Email Address (Recommended) *</label>
-                <input type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} required placeholder="noreply@sahoosweets.in" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
+                <input 
+                  type="email" 
+                  value={signupEmail} 
+                  onChange={e => {
+                    setSignupEmail(e.target.value);
+                    if (signupError) setSignupError('');
+                  }} 
+                  placeholder="noreply@sahoosweets.in" 
+                  className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" 
+                  style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} 
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-black text-black uppercase">Phone Number (+91)</label>
-                <input type="tel" maxLength={10} value={signupPhone} onChange={e => setSignupPhone(e.target.value)} placeholder="8763332962" className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
+                <input 
+                  type="tel" 
+                  maxLength={10} 
+                  value={signupPhone} 
+                  onChange={e => {
+                    setSignupPhone(e.target.value);
+                    if (signupError) setSignupError('');
+                  }} 
+                  placeholder="8763332962" 
+                  className="w-full px-3 py-1.5 border rounded-xl text-xs font-black text-black focus:outline-none" 
+                  style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} 
+                />
               </div>
+
+              {/* Admin Security PIN (Only displayed when Admin role is selected) */}
+              {signupRole === 'admin' && (
+                <div className="animate-fadeIn">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-black text-amber-950 uppercase">
+                      Admin Security PIN *
+                    </label>
+                    <span className="text-[9px] text-amber-800 font-black bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
+                      Default PIN: 9900
+                    </span>
+                  </div>
+                  <div className="relative flex items-center">
+                    <KeyRound className="absolute left-2.5 w-3.5 h-3.5 text-amber-800 pointer-events-none" />
+                    <input 
+                      type="password"
+                      maxLength={4}
+                      value={signupAdminPin}
+                      onChange={(e) => {
+                        setSignupAdminPin(e.target.value);
+                        if (signupError) setSignupError('');
+                      }}
+                      placeholder="Enter 4-digit PIN (9900)"
+                      required
+                      className="w-full pl-8 pr-3 py-1.5 border rounded-xl text-xs font-black tracking-widest text-black focus:outline-none"
+                      style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }}
+                    />
+                  </div>
+                </div>
+              )}
               
               <div>
-                <label className="block text-[10px] font-black text-black uppercase">Password</label>
+                <label className="block text-[10px] font-black text-black uppercase">Password (Min. 6 chars) *</label>
                 <div className="relative flex items-center">
-                  <input type={showSignupPassword ? 'text' : 'password'} value={signupPassword} onChange={e => setSignupPassword(e.target.value)} required placeholder="Password" className="w-full px-3 py-1.5 pr-9 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
+                  <input 
+                    type={showSignupPassword ? 'text' : 'password'} 
+                    value={signupPassword} 
+                    onChange={e => {
+                      setSignupPassword(e.target.value);
+                      if (signupError) setSignupError('');
+                    }} 
+                    required 
+                    placeholder="Create a strong password" 
+                    className="w-full px-3 py-1.5 pr-9 border rounded-xl text-xs font-black text-black focus:outline-none" 
+                    style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} 
+                  />
                   <button type="button" onClick={() => setShowSignupPassword(!showSignupPassword)} className="absolute right-2.5 text-black cursor-pointer">
                     {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -734,9 +900,20 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-black uppercase">Confirm Password</label>
+                <label className="block text-[10px] font-black text-black uppercase">Confirm Password *</label>
                 <div className="relative flex items-center">
-                  <input type={showConfirmPassword ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required placeholder="Confirm Password" className="w-full px-3 py-1.5 pr-9 border rounded-xl text-xs font-black text-black focus:outline-none" style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} />
+                  <input 
+                    type={showConfirmPassword ? 'text' : 'password'} 
+                    value={confirmPassword} 
+                    onChange={e => {
+                      setConfirmPassword(e.target.value);
+                      if (signupError) setSignupError('');
+                    }} 
+                    required 
+                    placeholder="Confirm your password" 
+                    className="w-full px-3 py-1.5 pr-9 border rounded-xl text-xs font-black text-black focus:outline-none" 
+                    style={{ backgroundColor: '#f2c98320', borderColor: '#BBAB47' }} 
+                  />
                   <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-2.5 text-black cursor-pointer">
                     {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -744,21 +921,88 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               </div>
 
               <div className="flex items-center pt-0.5">
-                <input type="checkbox" checked={termsAccepted} onChange={e => setTermsAccepted(e.target.checked)} required className="h-3.5 w-3.5 rounded cursor-pointer text-black" />
+                <input 
+                  type="checkbox" 
+                  checked={termsAccepted} 
+                  onChange={e => {
+                    setTermsAccepted(e.target.checked);
+                    if (signupError) setSignupError('');
+                  }} 
+                  required 
+                  className="h-3.5 w-3.5 rounded cursor-pointer text-black" 
+                />
                 <label className="ml-2 text-[10px] font-bold text-black">I agree to Terms & Conditions</label>
               </div>
+
+              {/* Explicit Sign Up Error Feedback */}
+              {signupError && (
+                <div className="mt-2 p-2.5 bg-rose-50 border border-rose-300 rounded-xl space-y-1.5 animate-fadeIn text-left">
+                  <div className="flex items-start space-x-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                    <p className="text-[11px] font-bold text-rose-800 leading-tight">{signupError}</p>
+                  </div>
+                  <div className="flex flex-col gap-1 pt-0.5">
+                    {signupError.includes('already exists') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsFlipped(false);
+                          setSignupError('');
+                        }}
+                        className="w-full py-1 px-2.5 bg-black hover:bg-gray-800 text-amber-400 font-black rounded-lg text-[11px] flex items-center justify-center space-x-1 transition cursor-pointer"
+                      >
+                        <span>Switch to Sign In ➔</span>
+                      </button>
+                    )}
+                    {canSwitchSignupToEmail && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSignupEmail('noreply@sahoosweets.in');
+                          setSignupPhone('');
+                          setSignupError('');
+                          setCanSwitchSignupToEmail(false);
+                        }}
+                        className="w-full py-1 px-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black rounded-lg text-[11px] flex items-center justify-center space-x-1 transition cursor-pointer"
+                      >
+                        <Mail className="w-3 h-3" />
+                        <span>Use Email Registration ("Sahoo Sweets") ➔</span>
+                      </button>
+                    )}
+                    {signupError.includes('waking up') && (
+                      <button
+                        type="button"
+                        onClick={handleSignupSubmit}
+                        disabled={isSendingOtp}
+                        className="w-full py-1 px-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black rounded-lg text-[11px] flex items-center justify-center space-x-1 transition cursor-pointer"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Retry Registration ➔</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <button 
                 type="submit" 
                 disabled={isSendingOtp}
-                className="w-full py-2.5 text-black font-black text-xs rounded-xl shadow cursor-pointer disabled:opacity-50" 
+                className="w-full py-2.5 text-black font-black text-xs rounded-xl shadow cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-1.5 transition" 
                 style={{ backgroundColor: '#c2b767' }}
               >
-                {isSendingOtp ? 'SENDING 6-DIGIT OTP...' : 'REGISTER & SEND 6-DIGIT OTP'}
+                {isSendingOtp ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                    <span>SENDING 6-DIGIT OTP...</span>
+                  </>
+                ) : (
+                  <span>REGISTER & SEND 6-DIGIT OTP ➔</span>
+                )}
               </button>
             </form>
 
             <p className="text-center text-xs text-black font-bold mt-2">
-              Already have an account? <button type="button" onClick={() => setIsFlipped(false)} className="font-black text-black hover:underline cursor-pointer">Sign In</button>
+              Already have an account? <button type="button" onClick={() => { setIsFlipped(false); setSignupError(''); }} className="font-black text-black hover:underline cursor-pointer">Sign In</button>
             </p>
           </div>
 

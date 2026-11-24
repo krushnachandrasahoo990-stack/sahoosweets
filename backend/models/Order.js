@@ -11,7 +11,7 @@ const orderSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true, index: true },
   userIdentifier: { type: String, required: true, index: true },
   customerName: { type: String, default: 'Customer' },
-  customerPhone: { type: String, default: '9078699528' },
+  customerPhone: { type: String, default: '8763332962' },
   date: { type: String, default: () => new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) },
   items: { type: String, required: true },
   itemsList: { type: [orderItemSchema], default: [] },

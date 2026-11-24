@@ -31,16 +31,19 @@ const allowedOrigins = [
   'http://127.0.0.1:3000',
   'https://sahoosweets.vercel.app',
   'http://sahoosweets.vercel.app',
+  'https://sahoosweets-hh5wm5wg0-campos15.vercel.app',
+  'http://sahoosweets-hh5wm5wg0-campos15.vercel.app',
   ...rawFrontendUrls
 ];
 
 const isAllowedOrigin = (origin) => {
   if (!origin) return true; // Allow non-browser requests (e.g. mobile apps, curl, server-to-server)
-  const clean = origin.trim().replace(/\/+$/, '');
-  if (allowedOrigins.some(ao => ao.replace(/\/+$/, '') === clean)) return true;
-  if (/^https:\/\/([a-zA-Z0-9\-]+\.)?vercel\.app$/.test(clean)) return true; // Allow any Vercel preview or production URL
-  if (/^http:\/\/localhost(:\d+)?$/.test(clean)) return true;
-  if (/^http:\/\/127\.0\.0\.1(:\d+)?$/.test(clean)) return true;
+  const clean = origin.trim().replace(/\/+$/, '').toLowerCase();
+  if (allowedOrigins.some(ao => ao.replace(/\/+$/, '').toLowerCase() === clean)) return true;
+  if (/^https?:\/\/([a-zA-Z0-9_\-]+\.)*vercel\.app$/i.test(clean)) return true; // Allow any Vercel preview or production URL
+  if (/^https?:\/\/([a-zA-Z0-9_\-]+\.)*onrender\.com$/i.test(clean)) return true; // Allow Render apps
+  if (/^http:\/\/localhost(:\d+)?$/i.test(clean)) return true;
+  if (/^http:\/\/127\.0\.0\.1(:\d+)?$/i.test(clean)) return true;
   return false;
 };
 
@@ -551,7 +554,7 @@ async function sendSmsOtp(phoneNumber, otp) {
 // =============================================================================
 const handleSendOtp = async (req, res) => {
   try {
-    const { identifier, type, role, adminPin } = req.body;
+    const { identifier, type, role, adminPin, name, password, email, phone } = req.body;
 
     if (!identifier) {
       return res.status(400).json({ 
@@ -570,6 +573,23 @@ const handleSendOtp = async (req, res) => {
     }
 
     const { type: identifierType, normalized, display } = parsed;
+
+    // Duplicate account check for Registration flow
+    if (type === 'Registration') {
+      let existingUser = null;
+      if (isDbConnected) {
+        existingUser = await User.findOne({ identifier: normalized });
+      } else {
+        existingUser = inMemoryUsers.get(normalized);
+      }
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          code: 'ACCOUNT_ALREADY_EXISTS',
+          message: 'An account with this email/phone already exists. Please sign in instead.'
+        });
+      }
+    }
 
     // Admin Access Security Check
     if (role === 'admin') {
@@ -643,6 +663,10 @@ const handleSendOtp = async (req, res) => {
         attempts: 0,
         role: role || 'customer',
         type: type || 'Login',
+        name: name || '',
+        phone: phone || '',
+        email: email || '',
+        password: password || '',
         lastSentAt: new Date(now)
       });
     } else {
@@ -653,6 +677,10 @@ const handleSendOtp = async (req, res) => {
         attempts: 0,
         role: role || 'customer',
         type: type || 'Login',
+        name: name || '',
+        phone: phone || '',
+        email: email || '',
+        password: password || '',
         lastSentAt: now
       });
     }
@@ -678,8 +706,201 @@ const handleSendOtp = async (req, res) => {
   }
 };
 
+// =============================================================================
+// ROUTE: REGISTER ACCOUNT (/api/auth/register)
+// Validates Full Name, Contact (Email / Indian Phone), Password, and Admin PIN
+// =============================================================================
+const handleRegister = async (req, res) => {
+  try {
+    const { name, email, phone, identifier, password, role, adminPin } = req.body;
+
+    // 1. Validate Full Name
+    if (!name || name.trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Full Name is required (minimum 2 characters).'
+      });
+    }
+
+    // 2. Validate Contact Identifier
+    const rawTarget = (email || identifier || phone || '').trim();
+    if (!rawTarget) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid Email Address or 10-digit Indian Mobile (+91).'
+      });
+    }
+
+    const parsed = parseAndValidateIdentifier(rawTarget);
+    if (!parsed) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid contact format. Please enter a valid Email Address or 10-digit Indian Mobile (+91).'
+      });
+    }
+
+    // 3. Validate Password
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long.'
+      });
+    }
+
+    // 4. Strict Role & Admin PIN check
+    const assignedRole = role === 'admin' ? 'admin' : 'customer';
+    if (assignedRole === 'admin') {
+      if (!adminPin || adminPin.trim() !== ADMIN_ACCESS_PIN) {
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid Admin Access PIN! Authorized owner PIN required (Default PIN: 9900).'
+        });
+      }
+    }
+
+    const { normalized, display, type: identifierType } = parsed;
+
+    // 5. Duplicate Account Check
+    let existingUser = null;
+    if (isDbConnected) {
+      const orConditions = [{ identifier: normalized }];
+      if (email && email.trim()) orConditions.push({ email: email.trim().toLowerCase() });
+      if (phone && phone.trim()) {
+        const cleanPh = phone.trim().replace(/\D/g, '').slice(-10);
+        if (cleanPh.length === 10) orConditions.push({ phone: cleanPh });
+      }
+      existingUser = await User.findOne({ $or: orConditions });
+    } else {
+      existingUser = inMemoryUsers.get(normalized);
+      if (!existingUser && email) {
+        for (const u of inMemoryUsers.values()) {
+          if (u.email && u.email.toLowerCase() === email.trim().toLowerCase()) {
+            existingUser = u;
+            break;
+          }
+        }
+      }
+      if (!existingUser && phone) {
+        const cleanPh = phone.trim().replace(/\D/g, '').slice(-10);
+        for (const u of inMemoryUsers.values()) {
+          if (u.phone && u.phone.replace(/\D/g, '').slice(-10) === cleanPh) {
+            existingUser = u;
+            break;
+          }
+        }
+      }
+    }
+
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        code: 'ACCOUNT_ALREADY_EXISTS',
+        message: 'An account with this email or mobile number already exists. Please sign in instead.'
+      });
+    }
+
+    // 6. Rate Limit Check
+    if (isRateLimited(normalized)) {
+      return res.status(429).json({
+        success: false,
+        message: 'Rate limit exceeded. Too many requests. Please try again after 10 minutes.'
+      });
+    }
+
+    // 7. 60-Second Cooldown Check
+    const now = Date.now();
+    let existingSession = isDbConnected 
+      ? await OtpSession.findOne({ identifier: normalized }).sort({ createdAt: -1 })
+      : inMemoryOtps.get(normalized);
+
+    if (existingSession && existingSession.lastSentAt) {
+      const lastSentTime = new Date(existingSession.lastSentAt).getTime();
+      if (now - lastSentTime < 60000) {
+        const remainingSecs = Math.ceil((60000 - (now - lastSentTime)) / 1000);
+        return res.status(429).json({
+          success: false,
+          message: `Please wait ${remainingSecs}s before requesting a new OTP verification code.`,
+          cooldown: remainingSecs
+        });
+      }
+    }
+
+    // 8. Generate 6-Digit OTP & 5-minute expiry
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const expiresAt = new Date(now + 5 * 60 * 1000);
+
+    const pendingData = {
+      identifier: normalized,
+      otp,
+      expiresAt,
+      role: assignedRole,
+      type: 'Registration',
+      name: name.trim(),
+      email: email ? email.trim().toLowerCase() : (normalized.includes('@') ? normalized : ''),
+      phone: phone ? phone.trim().replace(/\D/g, '').slice(-10) : (!normalized.includes('@') ? normalized : ''),
+      password,
+      attempts: 0,
+      lastSentAt: new Date(now)
+    };
+
+    // 9. Dispatch Verification OTP
+    let deliveryResult = { success: true, provider: 'in-memory' };
+    if (identifierType === 'email') {
+      try {
+        deliveryResult = await sendEmailOtp(normalized, otp, 'Registration');
+      } catch (err) {
+        console.error('[Registration Email Gateway Error]:', err);
+        return res.status(500).json({
+          success: false,
+          code: 'EMAIL_DELIVERY_FAILED',
+          message: `Registration failed: Unable to deliver OTP email (${err.message || 'SMTP Error'}). Please verify your email address or SMTP credentials.`
+        });
+      }
+    } else {
+      deliveryResult = await sendSmsOtp(normalized, otp);
+      if (!deliveryResult.success) {
+        return res.status(400).json({
+          success: false,
+          code: 'SMS_GATEWAY_NOT_CONFIGURED',
+          canSwitchToEmail: true,
+          message: 'Mobile SMS gateway is not configured on the server. Please register using your Email Address to receive your 6-digit verification code.'
+        });
+      }
+    }
+
+    // Save session only if dispatch succeeded
+    if (isDbConnected) {
+      await OtpSession.deleteMany({ identifier: normalized });
+      await OtpSession.create(pendingData);
+    } else {
+      inMemoryOtps.set(normalized, {
+        ...pendingData,
+        expiresAt: expiresAt.getTime()
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Account details verified! Verification code dispatched under "Sahoo Sweets" to ${display}. Please enter code to complete registration.`,
+      target: display,
+      identifierType,
+      expiresIn: 300,
+      cooldown: 60,
+      provider: deliveryResult?.provider || 'default'
+    });
+  } catch (error) {
+    console.error('[Registration Server Error]:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Registration failed due to a server error. Please try again.'
+    });
+  }
+};
+
 app.post('/api/auth/send-otp', handleSendOtp);
 app.post('/api/send-otp', handleSendOtp);
+app.post('/api/auth/register', handleRegister);
+app.post('/api/register', handleRegister);
 
 // =============================================================================
 // ROUTE: 2. VERIFY OTP (/api/auth/verify-otp)
@@ -802,8 +1023,13 @@ const handleVerifyOtp = async (req, res) => {
       });
     }
 
-    // OTP Verified Successfully! Clear OTP record
+    // OTP Verified Successfully!
     const verifiedRole = record.role || 'customer';
+    const regName = record.name || (verifiedRole === 'admin' ? 'Sahoo Sweets Admin' : (normalized.includes('@') ? normalized.split('@')[0] : 'Sahoo Customer'));
+    const regPhone = record.phone || (!normalized.includes('@') ? normalized : '');
+    const regEmail = record.email || (normalized.includes('@') ? normalized : '');
+    const regPassword = record.password || '';
+
     if (isDbConnected) {
       await OtpSession.deleteMany({ identifier: normalized });
     } else {
@@ -817,27 +1043,45 @@ const handleVerifyOtp = async (req, res) => {
       if (!user) {
         user = await User.create({
           identifier: normalized,
-          name: verifiedRole === 'admin' ? 'Sahoo Sweets Admin' : (normalized.includes('@') ? normalized.split('@')[0] : 'Sahoo Customer'),
-          phone: normalized.includes('@') ? '' : normalized,
-          email: normalized.includes('@') ? normalized : '',
-          role: verifiedRole
+          name: regName,
+          phone: regPhone,
+          email: regEmail,
+          password: regPassword,
+          role: verifiedRole,
+          walletBalance: 250,
+          rewardPoints: 350
         });
+      } else if (regName || regPassword) {
+        if (regName && regName !== 'Sahoo Customer') user.name = regName;
+        if (regPassword) user.password = regPassword;
+        if (regPhone) user.phone = regPhone;
+        if (regEmail) user.email = regEmail;
+        await user.save();
       }
     } else {
       if (!inMemoryUsers.has(normalized)) {
         inMemoryUsers.set(normalized, {
           identifier: normalized,
-          name: verifiedRole === 'admin' ? 'Sahoo Sweets Admin' : 'Sahoo Customer',
-          phone: normalized.includes('@') ? '' : normalized,
-          email: normalized.includes('@') ? normalized : '',
+          name: regName,
+          phone: regPhone,
+          email: regEmail,
+          password: regPassword,
           role: verifiedRole,
           walletBalance: 250,
           rewardPoints: 350,
-          addresses: [],
+          addresses: [
+            { id: 1, name: regName, phone: regPhone || '8763332962', address: 'Nagapur, Near Punjab National Bank', city: 'Gop, Puri', state: 'Odisha', pin: '752110', isDefault: true }
+          ],
           walletHistory: [{ id: 1, type: 'credit', title: 'Welcome Cashback Reward', amount: 250, date: new Date().toLocaleDateString() }],
           rewardsHistory: [{ id: 1, type: 'earned', title: 'Signup Bonus Points', points: 350, date: new Date().toLocaleDateString() }],
           refunds: []
         });
+      } else if (regName || regPassword) {
+        const u = inMemoryUsers.get(normalized);
+        if (regName && regName !== 'Sahoo Customer') u.name = regName;
+        if (regPassword) u.password = regPassword;
+        if (regPhone) u.phone = regPhone;
+        if (regEmail) u.email = regEmail;
       }
       user = inMemoryUsers.get(normalized);
     }
@@ -1384,7 +1628,8 @@ app.get('/', (req, res) => {
       health: '/api/health',
       menu: '/api/menu',
       sendOtp: '/api/auth/send-otp',
-      verifyOtp: '/api/auth/verify-otp'
+      verifyOtp: '/api/auth/verify-otp',
+      register: '/api/auth/register'
     }
   });
 });

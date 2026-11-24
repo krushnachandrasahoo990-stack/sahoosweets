@@ -7,6 +7,10 @@ const otpSessionSchema = new mongoose.Schema({
   attempts: { type: Number, default: 0 },
   role: { type: String, default: 'customer' },
   type: { type: String, default: 'Login' },
+  name: { type: String },
+  phone: { type: String },
+  email: { type: String },
+  password: { type: String },
   lastSentAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 

@@ -37,8 +37,8 @@ const userSchema = new mongoose.Schema({
   walletBalance: { type: Number, default: 250 },
   rewardPoints: { type: Number, default: 350 },
   addresses: { type: [addressSchema], default: [
-    { id: 1, name: "Krushna Chandra Sahoo", phone: "9078699528", address: "At/Po - Nagapur, Brahmagiri Road", city: "Puri", state: "Odisha", pin: "752001", isDefault: true },
-    { id: 2, name: "Sahoo Sweets Counter", phone: "9078699528", address: "Grand Road, Near Jagannath Temple", city: "Puri", state: "Odisha", pin: "752001", isDefault: false }
+    { id: 1, name: "Krushna Chandra Sahoo", phone: "8763332962", address: "Nagapur, Near Punjab National Bank", city: "Gop, Puri", state: "Odisha", pin: "752110", isDefault: true },
+    { id: 2, name: "Sahoo Sweets Counter", phone: "8763332962", address: "Nagapur, Near Punjab National Bank, Gop", city: "Puri", state: "Odisha", pin: "752110", isDefault: false }
   ] },
   walletHistory: { type: [walletTxSchema], default: [
     { id: 1, type: 'credit', title: 'Welcome Cashback Reward', amount: 250, date: 'Nov 12, 2026' },

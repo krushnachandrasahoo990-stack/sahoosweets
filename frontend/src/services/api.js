@@ -124,14 +124,23 @@ export const detectIdentifierType = (input) => {
 /**
  * Request 6-digit OTP delivery to entered Email or Phone
  */
-export const sendOtpApi = async (identifier, type = 'Login', role = 'customer', adminPin = '') => {
+export const sendOtpApi = async (identifier, type = 'Login', role = 'customer', adminPin = '', extra = {}) => {
   const cleanId = (identifier || '').trim();
 
   try {
     const response = await fetchWithTimeout(buildApiUrl('/auth/send-otp'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier: cleanId, type, role, adminPin }),
+      body: JSON.stringify({ 
+        identifier: cleanId, 
+        type, 
+        role, 
+        adminPin,
+        name: extra?.name || '',
+        email: extra?.email || '',
+        phone: extra?.phone || '',
+        password: extra?.password || ''
+      }),
     }, 65000);
 
     const data = await response.json();
@@ -149,7 +158,73 @@ export const sendOtpApi = async (identifier, type = 'Login', role = 'customer', 
       expiresAt,
       attempts: 0,
       role: role || 'customer',
+      name: extra?.name || 'Sahoo Customer',
       type
+    });
+
+    const isProd = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    const isTimeout = !!error.isTimeout;
+
+    const fallbackMessage = isTimeout
+      ? 'The Sahoo Sweets backend server is waking up from sleep mode (Render free-tier cold start, ~30-60s). Please wait a moment and retry, or use test code 123456.'
+      : isProd
+        ? 'Unable to connect to the Sahoo Sweets backend server (sahoosweets.onrender.com). The server may be waking up from sleep mode (up to ~60 seconds on free hosting). Please wait a moment and retry, or test with code 123456.'
+        : 'Backend server on port 5000 is not running. Running in Local Test Mode with test code 123456.';
+
+    return {
+      success: true,
+      isLocalFallback: true,
+      isTimeout,
+      canRetry: true,
+      message: fallbackMessage,
+      target: isEmail ? norm : `+91 ${norm}`,
+      identifierType: isEmail ? 'email' : 'phone',
+      expiresIn: 300,
+      cooldown: 60
+    };
+  }
+};
+
+/**
+ * Register a new user account with Name, Email, Phone, Password, and Role
+ */
+export const registerAccountApi = async (data = {}) => {
+  const { name = '', email = '', phone = '', identifier = '', password = '', role = 'customer', adminPin = '' } = data;
+  const rawTarget = (email || identifier || phone || '').trim();
+  const cleanId = normalizeIdentifier(rawTarget);
+
+  try {
+    const response = await fetchWithTimeout(buildApiUrl('/auth/register'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        identifier: cleanId,
+        password,
+        role,
+        adminPin
+      })
+    }, 65000);
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.warn('[API Client] Registration network issue. Activating fallback mode:', error);
+
+    const norm = cleanId || normalizeIdentifier(rawTarget);
+    const isEmail = norm.includes('@');
+    const fallbackOtp = '123456';
+    const expiresAt = Date.now() + 5 * 60 * 1000;
+
+    localOtpStore.set(norm, {
+      otp: fallbackOtp,
+      expiresAt,
+      attempts: 0,
+      role: role || 'customer',
+      name: name.trim() || 'Sahoo Customer',
+      type: 'Registration'
     });
 
     const isProd = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
